@@ -1,3 +1,4 @@
+#' @export
 Database <- R6::R6Class(
   'Database',
   public = list(
