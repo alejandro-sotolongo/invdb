@@ -23,7 +23,7 @@ xts of price time-series adjusted for dividends and splits
 Download multiple tickers from Tiingo
 }
 \examples{
-\dontrun {
+  \dontrun{
   download_tiingo_tickers(c('AAPL', 'GOOG', 'TSLA'), api_key, '2020-01-01')
 }
 }
