@@ -4,16 +4,16 @@
 \alias{download_tiingo_tickers}
 \title{Download multiple tickers from Tiingo}
 \usage{
-download_tiingo_tickers(ticker_vec, t_api, start_date, end_date = NULL)
+download_tiingo_tickers(ticker_vec, t_api, date_start, date_end = NULL)
 }
 \arguments{
 \item{ticker_vec}{character vector of tickers to download}
 
 \item{t_api}{API key}
 
-\item{start_date}{first date in time-series to download}
+\item{date_start}{first date in time-series to download}
 
-\item{end_date}{last date in time-series to download, if left `NULL` will
+\item{date_end}{last date in time-series to download, if left `NULL` will
 default to today}
 }
 \value{

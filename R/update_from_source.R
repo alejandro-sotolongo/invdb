@@ -2,20 +2,20 @@
 #' @param ticker character of stock ticker to download, see
 #'   `download_tiingo_tickers` for downloading multiple tickers
 #' @param t_api API key
-#' @param start_date inception for time-series
-#' @param end_date last day of time-series, if left `NULL` will default to today
+#' @param date_start inception for time-series
+#' @param date_end last day of time-series, if left `NULL` will default to today
 #' @return `data.frame` of historical prices (adjusted for splits and dividends)
 #'   with dates in first column
 #' @export
-download_tiingo_csv <- function(ticker, t_api, start_date = '1970-01-01',
-                                end_date = NULL) {
-  if (is.null(end_date)) {
-    end_date <- Sys.Date()
+download_tiingo_csv <- function(ticker, t_api, date_start = '1970-01-01',
+                                date_end = NULL) {
+  if (is.null(date_end)) {
+    date_end <- Sys.Date()
   }
   t_url <- paste0('https://api.tiingo.com/tiingo/daily/',
                   ticker,
-                  '/prices?startDate=', start_date,
-                  '&endDate=', end_date,
+                  '/prices?startDate=', date_start,
+                  '&endDate=', date_end,
                   '&format=csv&resampleFreq=daily',
                   '&token=', t_api)
   dat <- try(read.csv(t_url), silent = TRUE)
@@ -37,8 +37,8 @@ download_tiingo_csv <- function(ticker, t_api, start_date = '1970-01-01',
 #' @title Download multiple tickers from Tiingo
 #' @param ticker_vec character vector of tickers to download
 #' @param t_api API key
-#' @param start_date first date in time-series to download
-#' @param end_date last date in time-series to download, if left `NULL` will
+#' @param date_start first date in time-series to download
+#' @param date_end last date in time-series to download, if left `NULL` will
 #'   default to today
 #' @return xts of price time-series adjusted for dividends and splits
 #' @examples
@@ -46,20 +46,20 @@ download_tiingo_csv <- function(ticker, t_api, start_date = '1970-01-01',
 #'   download_tiingo_tickers(c('AAPL', 'GOOG', 'TSLA'), api_key, '2020-01-01')
 #' }
 #' @export
-download_tiingo_tickers <- function(ticker_vec, t_api, start_date, end_date = NULL) {
+download_tiingo_tickers <- function(ticker_vec, t_api, date_start, date_end = NULL) {
 
   utick <- unique(ticker_vec)
   if (length(utick) < length(ticker_vec)) {
     warning('duplicated tickers found and removed')
   }
   dat <- lapply(utick, download_tiingo_csv, t_api = t_api,
-                start_date = start_date, end_date = end_date)
+                date_start = date_start, date_end = date_end)
   dat <- dat[!sapply(dat, is.null)]
   nm <- sapply(dat, function(x) {colnames(x)[2]})
   if (length(dat) == 1) {
     price <- dat[[1]]
   } else {
-    dt <- us_trading_days()
+    dt <- us_trading_days(date_start, date_end)
     price <- matrix(nrow = length(dt), ncol = length(dat))
     for (i in 1:ncol(price)) {
       ix <- match(dat[[i]]$date, dt)

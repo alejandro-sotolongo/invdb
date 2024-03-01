@@ -4,7 +4,7 @@
 \alias{download_tiingo_csv}
 \title{Download price time-series from Tiingo}
 \usage{
-download_tiingo_csv(ticker, t_api, start_date = "1970-01-01", end_date = NULL)
+download_tiingo_csv(ticker, t_api, date_start = "1970-01-01", date_end = NULL)
 }
 \arguments{
 \item{ticker}{character of stock ticker to download, see
@@ -12,9 +12,9 @@ download_tiingo_csv(ticker, t_api, start_date = "1970-01-01", end_date = NULL)
 
 \item{t_api}{API key}
 
-\item{start_date}{inception for time-series}
+\item{date_start}{inception for time-series}
 
-\item{end_date}{last day of time-series, if left `NULL` will default to today}
+\item{date_end}{last day of time-series, if left `NULL` will default to today}
 }
 \value{
 `data.frame` of historical prices (adjusted for splits and dividends)

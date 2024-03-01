@@ -121,7 +121,11 @@ Database <- R6::R6Class(
 
     check_msl = function() {
       if (is.null(self$msl)) {
-        stop('msl is missing')
+        x <- try(self$read_msl())
+        if ('data.frame' %in% class(x)) {
+          return('pass')
+        }
+        stop('msl is missing and could not auto load')
       }
     },
 
@@ -154,6 +158,31 @@ Database <- R6::R6Class(
       ret <- price_to_ret(price_xts)
       ret_df <- xts_to_dataframe(ret)
       write_parquet(ret_df, self$bucket$path('tiingo.parquet'))
+    },
+
+    update_tiingo_daily = function(date_start = NULL, date_end = NULL) {
+      self$check_bucket()
+      self$check_msl()
+      self$check_api_keys()
+      msl <- self$msl
+      ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
+      ticker_vec <- na.omit(ticker_vec)
+      ticker_vec <- unique(ticker_vec)
+      if (is.null(date_end)) date_end <- Sys.Date()
+      if (is.null(date_start)) {
+        td <- us_trading_days(date_end - 6, date_end)
+        date_start <- td[1]
+      }
+      price <- download_tiingo_tickers(ticker_vec, self$api_keys$t_api,
+                                       date_start = date_start,
+                                       date_end = date_end)
+      price_xts <- xts(price[, -1], price[[1]])
+      hist_ret <- read_parquet(self$bucket$path('tiingo.parquet'))
+      hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
+      ret <- price_to_ret(price_xts)
+      combo_ret <- xts_rbind(hist_ret, ret)
+      combo_ret_df <- xts_to_dataframe(combo_ret)
+      write_parquet(combo_ret_df, self$bucket$path('tiingo.parquet'))
     },
 
     update_macro = function(fpath = NULL,
