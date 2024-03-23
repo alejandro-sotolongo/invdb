@@ -53,17 +53,20 @@ Database <- R6::R6Class(
         stop(paste0('msl is wrong structure ', class(msl)))
       }
       self$check_bucket()
-      write_parquet(msl, bucket$path('msl.parquet'))
+      write_parquet(msl, self$bucket$path('tables/msl.parquet'))
     },
 
     read_msl = function() {
       self$check_bucket()
-      self$msl <- read_parquet(self$bucket$path('msl.parquet'))
+      self$msl <- read_parquet(self$bucket$path('tables/msl.parquet'))
     },
 
     read_msl_xl = function() {
-      self$msl <- readxl::read_excel('N:/Investment Team/DATABASES/MDB/Tables/msl.xlsx',
-                                     'msl')
+      self$msl <- readxl::read_excel(
+        path = 'N:/Investment Team/DATABASES/MDB/Tables/msl.xlsx',
+        sheet = 'msl',
+        col_types = 'text'
+      )
     },
 
     write_layer = function(layer = NULL) {
@@ -73,12 +76,12 @@ Database <- R6::R6Class(
         stop(paste0('layer is wrong structure ', class(layer)))
       }
       self$check_bucket()
-      write_parquet(layer, bucket$path('layer.parquet'))
+      write_parquet(layer, bucket$path('tables/layer.parquet'))
     },
 
     read_layer = function() {
       self$check_bucket()
-      self$layer <- read_parquet(self$bucket$path('layer.parquet'))
+      self$layer <- read_parquet(self$bucket$path('tables/layer.parquet'))
     },
 
     write_geo = function(geo = NULL) {
@@ -92,12 +95,12 @@ Database <- R6::R6Class(
         stop(paste0('geo is wrong structure ', class(geo)))
       }
       self$check_bucket()
-      write_parquet(geo, self$bucket$path('geo.parquet'))
+      write_parquet(geo, self$bucket$path('tables/geo.parquet'))
     },
 
     read_geo = function() {
       self$check_bucket()
-      self$geo <- read_parquet(self$bucket$path('geo.parquet'))
+      self$geo <- read_parquet(self$bucket$path('tables/geo.parquet'))
     },
 
     read_geo_xl = function() {
@@ -106,8 +109,8 @@ Database <- R6::R6Class(
 
     read_macro = function() {
       self$check_bucket()
-      r3 <- read_parquet(self$bucket$path('macro_r3.parquet'))
-      acwi <- read_parquet(self$bucket$path('macro_acwi.parquet'))
+      r3 <- read_parquet(self$bucket$path('macro/macro_r3.parquet'))
+      acwi <- read_parquet(self$bucket$path('macro/macro_acwi.parquet'))
       self$macro <- list(r3 = r3, acwi = acwi)
     },
 
@@ -124,8 +127,32 @@ Database <- R6::R6Class(
         x <- try(self$read_msl())
         if ('data.frame' %in% class(x)) {
           return('pass')
+        } else {
+          stop('msl is missing and could not auto load')
         }
-        stop('msl is missing and could not auto load')
+      } else {
+        if ('data.frame' %in% class(self$msl)) {
+          return('pass')
+        } else {
+          stop('msl is not a data.frame')
+        }
+      }
+    },
+
+    check_layer = function() {
+      if (is.null(self$layer)) {
+        x <- try(self$read_layer())
+        if ('data.frame' %in% class(x)) {
+          return('pass')
+        } else {
+          stop('layer is missing and could not autoload')
+        }
+      } else {
+        if ('data.frame' %in% class(self$layer)) {
+          return('pass')
+        } else {
+          stop('layer is not a data.frame')
+        }
       }
     },
 
@@ -139,7 +166,132 @@ Database <- R6::R6Class(
       }
     },
 
-    # updates ----
+    # holdings ----
+
+    update_holding = function(dtc_name, as_of = NULL, user_email = NULL,
+                              xl_df = NULL, overwrite = FALSE) {
+      if (is.null(as_of)) {
+        as_of <- last_us_trading_day()
+      }
+      if (is.null(user_email)) {
+        user_email <- 'alejandro.sotolongo@diversifiedtrust.com'
+      }
+      self$check_bucket()
+      self$check_layer()
+      obs <- self$layer[self$layer$DTCName == dtc_name, ]
+      if (nrow(obs) == 0) {
+        stop('could not find account id in layer')
+      }
+      if (nrow(obs) > 1) {
+        warning('found duplicate account ids in layer, taking first match')
+        obs <- obs[1, ]
+      }
+      hist_df <- read_holdings_file(self$bucket, dtc_name)
+      if (is.null(hist_df)) {
+        hist_file <- FALSE
+      } else {
+        hist_file <- TRUE
+      }
+      if (obs$HoldingsSource == 'SEC') {
+        df <- self$update_sec(obs, user_email)
+      }
+      if (obs$HoldingsSource == 'BD') {
+        df <- self$update_bd(obs, self$api_keys, as_of)
+      }
+      # code for excel inputs
+      s3_path <- paste0('holdings/', dtc_name, '.parquet')
+      if (hist_file) {
+        if (df$returnInfo[1] %in% hist_df$returnInfo) {
+          warning(paste0(dtc_name, ' already up to date.'))
+          return()
+        } else {
+          new_df <- rob_rbind(hist_df, df)
+          write_parquet(new_df, self$bucket$path(s3_path))
+        }
+      } else {
+        warning(paste0(dtc_name, ' not found, creating new file'))
+        write_parquet(df, self$bucket$path(s3_path))
+      }
+    },
+
+    update_sec = function(obs, user_email) {
+      df <- download_sec_nport(obs$LongCIK, obs$ShortCIK, user_email)
+      return(df)
+    },
+
+    update_bd = function(obs, api_keys, as_of) {
+      df <- download_bd(obs$BDAccountID, api_keys, as_of)
+      return(df)
+    },
+
+    update_all_layer = function(user_email = NULL, as_of = NULL,
+                                 update_csv = FALSE) {
+      if (is.null(user_email)) user_email <- 'asotolongo@diversifiedtrust.com'
+      self$check_layer()
+      sec <- self$layer[self$layer$HoldingsSource == 'SEC', ]
+      if (nrow(sec) == 0) {
+        warning('no SEC files found to update')
+      } else {
+        print('updating SEC')
+        for (i in 1:nrow(sec)) {
+          print(paste0('updating ', sec$DTCName[i], ' ', i, ' out of ', nrow(sec)))
+          self$update_holding(sec$DTCName[i], as_of, user_email)
+        }
+      }
+      bd <- self$layer[self$layer$HoldingsSource == 'BD', ]
+      if (nrow(bd) == 0) {
+        warning('no BD files found to update')
+      } else {
+        print('updating BD')
+        for (i in 1:nrow(bd)) {
+          print(paste0('updating ', bd$DTCName[i], ' ', i, ' out of ', nrow(bd)))
+          self$update_holding(bd$DTCName[i], as_of, user_email)
+        }
+      }
+    },
+
+    get_curr_holdings = function() {
+      self$check_bucket()
+      self$check_msl()
+      ix <- self$msl$Layer == 2
+      ix[is.na(ix)] <- FALSE
+      lay_2 <- self$msl[ix, ]
+      df <- data.frame()
+      all_files <- self$bucket$ls('holdings/')
+      for (i in 1:nrow(lay_2)) {
+        file_nm <- paste0('holdings/', lay_2$DTCName[i], '.parquet')
+        print(paste0('reading ', file_nm))
+        if (file_nm %in% all_files) {
+          df_i <- read_parquet(self$bucket$path(file_nm))
+          df_i$ParentName <- lay_2$DTCName[i]
+          df <- rob_rbind(df, df_i)
+        } else {
+          warning(paste0(file_nm, ' not found'))
+        }
+      }
+      is_dup <- duplicated(df$cusip, incomparables = c(NA, "000000000")) |
+        duplicated(df$ticker, incomparables = NA) |
+        duplicated(df$isin, incomparables = NA)
+      res <- list(
+        all = df,
+        uniq = df[!is_dup, ]
+      )
+      return(res)
+    },
+
+    update_factset = function() {
+      self$check_msl()
+      self$check_bucket()
+      self$check_api_keys()
+      ids <- na.omit(unique(self$msl$ISIN))
+      eps <- download_fs_large_ids(
+        self$api_keys,
+        ids,
+        "FF_EPS(QTR_R,0)"
+      )
+    },
+
+    # returns ----
 
     update_all_tiingo = function(start_date = NULL, end_date = NULL) {
       self$check_bucket()
@@ -157,7 +309,7 @@ Database <- R6::R6Class(
       price_xts <- xts(price[, -1], price[[1]])
       ret <- price_to_ret(price_xts)
       ret_df <- xts_to_dataframe(ret)
-      write_parquet(ret_df, self$bucket$path('tiingo.parquet'))
+      write_parquet(ret_df, self$bucket$path('return/tiingo.parquet'))
     },
 
     update_tiingo_daily = function(date_start = NULL, date_end = NULL) {
@@ -168,7 +320,7 @@ Database <- R6::R6Class(
       ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
       ticker_vec <- na.omit(ticker_vec)
       ticker_vec <- unique(ticker_vec)
-      if (is.null(date_end)) date_end <- Sys.Date()
+      if (is.null(date_end)) date_end <- last_us_trading_day()
       if (is.null(date_start)) {
         td <- us_trading_days(date_end - 6, date_end)
         date_start <- td[1]
@@ -177,12 +329,45 @@ Database <- R6::R6Class(
                                        date_start = date_start,
                                        date_end = date_end)
       price_xts <- xts(price[, -1], price[[1]])
-      hist_ret <- read_parquet(self$bucket$path('tiingo.parquet'))
+      hist_ret <- read_parquet(self$bucket$path('returns/tiingo.parquet'))
       hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
       ret <- price_to_ret(price_xts)
       combo_ret <- xts_rbind(hist_ret, ret)
       combo_ret_df <- xts_to_dataframe(combo_ret)
-      write_parquet(combo_ret_df, self$bucket$path('tiingo.parquet'))
+      write_parquet(combo_ret_df, self$bucket$path('returns/tiingo.parquet'))
+    },
+
+    update_ctf_daily = function() {
+      self$check_bucket()
+      self$check_msl()
+      self$check_api_keys()
+      ix <- self$msl$ReturnSource == 'factset'
+      ix[is.na(ix)] <- FALSE
+      factset <- self$msl[ix, ]
+      res <- list()
+      for (i in 1:nrow(factset)) {
+        id <- paste0("CLIENT:/PA_SOURCED_RETURNS/", factset$ISIN[i])
+        res[[i]] <- download_fs_ret(id, self$api_keys)
+      }
+      res_ret <- lapply(res, '[[', 'ret')
+      is_miss <- function(x) {
+        if (is.null(nrow(x))) {
+          return(TRUE)
+        }
+        if (nrow(x) == 0) {
+          return(TRUE)
+        } else {
+          return(FALSE)
+        }
+      }
+      miss_ret <- sapply(res_ret, is_miss)
+      new_ret <- do.call('cbind', res_ret[!miss_ret])
+      colnames(new_ret) <- factset$ReturnCol[!miss_ret]
+      hist_ret <- read_parquet(self$bucket$path("returns/daily/ctf_d.parquet"))
+      hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
+      combo <- xts_rbind(hist_ret, new_ret)
+      combo <- xts_to_dataframe(combo)
+      write_parquet(combo, self$bucket$path("returns/daily/ctf_d.parquet"))
     },
 
     update_macro = function(fpath = NULL,
@@ -200,6 +385,23 @@ Database <- R6::R6Class(
       self$macro <- list(r3 = r3_df, acwi = acwi_df)
       write_parquet(r3_df, self$bucket$path('macro_r3.parquet'))
       write_parquet(acwi_df, self$bucket$path('macro_acwi.parquet'))
+    },
+
+    # reports ----
+
+    missing_from_msl = function() {
+      self$check_msl()
+      holdings <- self$get_curr_holdings()
+      mdf <- merge_msl(holdings$uniq, self$msl)
+    },
+
+    check_ctf_holdings = function() {
+      self$check_msl()
+      us_act <- read_parquet(self$bucket$path('holdings/US Active Equity.parquet'))
+      us_cor <- read_parquet(self$bucket$path('holdings/US Core Equity.parquet'))
+      intl <- read_parquet(self$bucket$path('holdings/International Equity.parquet'))
+
     }
+
   )
 )

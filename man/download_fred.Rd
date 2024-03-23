@@ -2,7 +2,7 @@
 % Please edit documentation in R/update_from_source.R
 \name{download_fred}
 \alias{download_fred}
-\title{Download from FED Database}
+\title{Download Econ Time-series from FED Database}
 \usage{
 download_fred(series_id, fred_api)
 }
@@ -15,5 +15,5 @@ download_fred(series_id, fred_api)
 xts of economic time-series
 }
 \description{
-Download from FED Database
+Download Econ Time-series from FED Database
 }
