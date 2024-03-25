@@ -190,6 +190,7 @@ download_sec_nport = function(long_cik, short_cik, user_email) {
   }
   df[ ,'returnInfo'] <- as.Date(file_date)
   df$pctVal <- as.numeric(df$pctVal)
+  df$pctVal <- df$pctVal / 100
   return(df)
 }
 
@@ -453,6 +454,5 @@ download_fs_large_names <- function(api_keys, ids) {
   }
   return(df)
 }
-
 
 

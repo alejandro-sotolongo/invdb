@@ -92,7 +92,7 @@ expand_all <- function(mdf, msl, bucket) {
   max_layer <- 4
   res <- drill_down(mdf, msl, bucket)
   for (i_layer in 1:max_layer) {
-    if (max(res$match$Layer) == 1) {
+    if (max(res$match$Layer, na.rm = TRUE) == 1) {
       break
     }
     ix <- res$match$Layer > 1
@@ -156,17 +156,48 @@ check_mdf <- function(mdf) {
 }
 
 
+#' @export
 latest_holdings <- function(df) {
-  ix <- df$returnInfo == max(df$returnInfo, na.rm = TRUE)
-  if (any(is.na(ix))) {
+  if (any(is.na(df$returnInfo))) {
     warning('some returnInfo missing')
-    ix[is.na(ix)] <- FALSE
   }
-  df[ix, ]
+  if ('ParrentAsset' %in% colnames(df)) {
+    pa <- na.omit(unique(df$ParrentAsset))
+    for (i in 1:length(pa)) {
+      is_pa <- df$ParrentAsset == pa[i]
+      is_pa[is.na(is_pa)] <- FALSE
+      is_old <- df[is_pa, 'returnInfo'] < max(df[is_pa, 'returnInfo'], na.rm = TRUE)
+      df <- df[!is_old, ]
+    }
+  } else {
+    ix <- df$returnInfo == max(df$returnInfo, na.rm = TRUE)
+    if (any(is.na(ix))) {
+      warning('some returnInfo missing')
+      ix[is.na(ix)] <- FALSE
+    }
+    df <- df[ix, ]
+  }
+  return(df)
 }
 
-# obs <- self$layer[self$layer$HoldingsSource == "SEC", ]
+
+port_expand_all <- function(dtc_name, bucket, msl, latest = TRUE) {
+  df <- read_holdings_file(bucket, dtc_name)
+  if (latest) {
+    df <- latest_holdings(df)
+  }
+  mdf <- merge_msl(df, msl)
+  exp_df <- expand_all(mdf, msl, bucket)
+  if (latest) {
+
+  }
+}
+
+# ix <- db$msl$HoldingsSource == 'SEC'
+# ix[is.na(ix)] <- FALSE
+# obs <- db$msl[ix, ]
 # for (i in 1:nrow(obs)) {
-#   df <- self$update_sec(obs[i, ], user_email)
-#   write_parquet(df, self$bucket$path(paste0("holdings/", obs$DTCName[i], '.parquet')))
+#   df <- read_holdings_file(db$bucket, obs$DTCName[i])
+#   df$pctVal <- df$pctVal / 100
+#   write_parquet(df, db$bucket$path(paste0('holdings/', obs$DTCName[i], '.parquet')))
 # }
