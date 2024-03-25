@@ -3,7 +3,6 @@ Database <- R6::R6Class(
   'Database',
   public = list(
     msl = NULL,
-    layer = NULL,
     geo = NULL,
     api_keys = NULL,
     bucket = NULL,
@@ -11,32 +10,38 @@ Database <- R6::R6Class(
 
     initialize = function(
       msl = NULL,
-      layer = NULL,
       geo = NULL,
       bucket = NULL,
-      api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData',
-      auto_load_bucket = FALSE)
+      api_keys = NULL,
+      api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData')
     {
-      api_keys <- list()
-      load(api_file)
-      if (!exists('api_keys')) {
-        stop('could not find api_keys from load(api_file)')
-      }
-      self$api_keys <- api_keys
-      self$check_api_keys()
-      if (is.null(bucket) & auto_load_bucket) {
-        if (is.null(api_keys$s3)) {
-          stop('s3 api keys not found for auto_load_bucket')
+      if (is.null(api_keys)) {
+        if (file.exists(api_file)) {
+          load(api_file)
+          if (exists('api_keys')) {
+            self$api_keys <- api_keys
+          } else {
+            stop('api keys list is not named api_keys')
+          }
+        } else {
+          if (is.null(api_keys)) {
+            stop('must either supply api_keys or api_file location')
+          } else {
+            self$api_keys <- api_keys
+          }
         }
-        bucket <- arrow::s3_bucket(
-          'dtc-inv',
-          access_key = api_keys$s3$access_key,
-          secret_key = api_keys$s3$secret_key
-        )
       }
+      self$check_api_keys()
+      bucket <- arrow::s3_bucket(
+        'dtc-inv',
+        access_key = api_keys$s3$access_key,
+        secret_key = api_keys$s3$secret_key
+      )
+      self$bucket <- bucket
       self$msl <- msl
-      self$layer <- layer
-      self$api_keys <- api_keys
+      self$check_msl()
+      self$geo <- geo
+      self$check_geo()
       self$bucket <- bucket
     },
 
@@ -69,21 +74,6 @@ Database <- R6::R6Class(
       )
     },
 
-    write_layer = function(layer = NULL) {
-      if (is.null(layer)) layer <- self$layer
-      if (is.null(layer)) stop('layer is missing')
-      if (!'data.frame' %in% class(layer)) {
-        stop(paste0('layer is wrong structure ', class(layer)))
-      }
-      self$check_bucket()
-      write_parquet(layer, bucket$path('tables/layer.parquet'))
-    },
-
-    read_layer = function() {
-      self$check_bucket()
-      self$layer <- read_parquet(self$bucket$path('tables/layer.parquet'))
-    },
-
     write_geo = function(geo = NULL) {
       if (is.null(geo)) {
         geo <- self$geo
@@ -104,7 +94,10 @@ Database <- R6::R6Class(
     },
 
     read_geo_xl = function() {
-      self$geo <- readxl::read_excel('N:/Investment Team/DATABASES/MDB/Tables/geo.xlsx')
+      self$geo <- readxl::read_excel(
+        path = 'N:/Investment Team/DATABASES/MDB/Tables/geo.xlsx',
+        col_types = c('numeric', rep('text', 4))
+      )
     },
 
     read_macro = function() {
@@ -139,19 +132,19 @@ Database <- R6::R6Class(
       }
     },
 
-    check_layer = function() {
-      if (is.null(self$layer)) {
-        x <- try(self$read_layer())
+    check_geo = function() {
+      if (is.null(self$geo)) {
+        x <- try(self$read_geo())
         if ('data.frame' %in% class(x)) {
           return('pass')
         } else {
-          stop('layer is missing and could not autoload')
+          stop('geo is missing and could not auto load')
         }
       } else {
-        if ('data.frame' %in% class(self$layer)) {
+        if ('data.frame' %in% class(self$geo)) {
           return('pass')
         } else {
-          stop('layer is not a data.frame')
+          stop('geo is not a data.frame')
         }
       }
     },
@@ -177,13 +170,14 @@ Database <- R6::R6Class(
         user_email <- 'alejandro.sotolongo@diversifiedtrust.com'
       }
       self$check_bucket()
-      self$check_layer()
-      obs <- self$layer[self$layer$DTCName == dtc_name, ]
+      ix <- self$msl$DTCName == dtc_name
+      ix[is.na(ix)] <- FALSE
+      obs <- self$msl[ix, ]
       if (nrow(obs) == 0) {
-        stop('could not find account id in layer')
+        stop('could not find account id in msl')
       }
       if (nrow(obs) > 1) {
-        warning('found duplicate account ids in layer, taking first match')
+        warning('found duplicate account ids in msl, taking first match')
         obs <- obs[1, ]
       }
       hist_df <- read_holdings_file(self$bucket, dtc_name)
@@ -224,11 +218,11 @@ Database <- R6::R6Class(
       return(df)
     },
 
-    update_all_layer = function(user_email = NULL, as_of = NULL,
-                                 update_csv = FALSE) {
+    update_all_port = function(user_email = NULL, as_of = NULL, update_csv = FALSE) {
       if (is.null(user_email)) user_email <- 'asotolongo@diversifiedtrust.com'
-      self$check_layer()
-      sec <- self$layer[self$layer$HoldingsSource == 'SEC', ]
+      ix <- self$msl$HoldingsSource == 'SEC'
+      ix[is.na(ix)] <- FALSE
+      sec <- self$msl[ix, ]
       if (nrow(sec) == 0) {
         warning('no SEC files found to update')
       } else {
@@ -238,7 +232,9 @@ Database <- R6::R6Class(
           self$update_holding(sec$DTCName[i], as_of, user_email)
         }
       }
-      bd <- self$layer[self$layer$HoldingsSource == 'BD', ]
+      ix <- self$msl$HoldingsSource == 'BD'
+      ix[is.na(ix)] <- FALSE
+      bd <- self$msl[ix, ]
       if (nrow(bd) == 0) {
         warning('no BD files found to update')
       } else {
@@ -251,8 +247,6 @@ Database <- R6::R6Class(
     },
 
     get_curr_holdings = function() {
-      self$check_bucket()
-      self$check_msl()
       ix <- self$msl$Layer == 2
       ix[is.na(ix)] <- FALSE
       lay_2 <- self$msl[ix, ]
