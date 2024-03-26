@@ -21,6 +21,13 @@ read_macro_wb <- function(wb, idx, fact_nm) {
 }
 
 
+#' @title Match securities in a portfolio with the Master Security List
+#' @param df data.frame of securities, see details
+#' @param msl Master Security List
+#' @details
+#' The match will attempt to match the following `df` columns in order: ticker,
+#'   cusip, name, isin, and identifier
+#' @return numeric vector with row numbers of the match in the `msl`
 #' @export
 msl_match <- function(df, msl) {
   ix_ticker <- match(df$ticker, msl$Ticker, incomparables = NA)
@@ -47,6 +54,7 @@ msl_match <- function(df, msl) {
     return(a)
   }
 }
+
 
 
 #' @export
@@ -166,8 +174,14 @@ latest_holdings <- function(df) {
     for (i in 1:length(pa)) {
       is_pa <- df$ParrentAsset == pa[i]
       is_pa[is.na(is_pa)] <- FALSE
-      is_old <- df[is_pa, 'returnInfo'] < max(df[is_pa, 'returnInfo'], na.rm = TRUE)
-      df <- df[!is_old, ]
+      df_pa <- df[is_pa, ]
+      is_old <- df_pa[, 'returnInfo'] < max(df_pa[, 'returnInfo'], na.rm = TRUE)
+      df_pa <- df_pa[!is_old, ]
+      if (i == 1) {
+        res <- df_pa
+      } else {
+        res <- rbind(res, df_pa)
+      }
     }
   } else {
     ix <- df$returnInfo == max(df$returnInfo, na.rm = TRUE)
@@ -175,12 +189,13 @@ latest_holdings <- function(df) {
       warning('some returnInfo missing')
       ix[is.na(ix)] <- FALSE
     }
-    df <- df[ix, ]
+    res <- df[ix, ]
   }
-  return(df)
+  return(res)
 }
 
 
+#' @export
 port_expand_all <- function(dtc_name, bucket, msl, latest = TRUE) {
   df <- read_holdings_file(bucket, dtc_name)
   if (latest) {
@@ -189,9 +204,14 @@ port_expand_all <- function(dtc_name, bucket, msl, latest = TRUE) {
   mdf <- merge_msl(df, msl)
   exp_df <- expand_all(mdf, msl, bucket)
   if (latest) {
-
+    exp_df$match <- latest_holdings(exp_df$match)
+    exp_df$miss <- latest_holdings(exp_df$miss)
   }
+  return(exp_df)
 }
+
+
+
 
 # ix <- db$msl$HoldingsSource == 'SEC'
 # ix[is.na(ix)] <- FALSE
