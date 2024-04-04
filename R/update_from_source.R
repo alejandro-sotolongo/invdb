@@ -59,6 +59,10 @@ download_tiingo_tickers <- function(ticker_vec, t_api, date_start = NULL,
   dat <- lapply(utick, download_tiingo_csv, t_api = t_api,
                 date_start = date_start, date_end = date_end)
   dat <- dat[!sapply(dat, is.null)]
+  if (length(dat) == 0) {
+    warning('no tickers found')
+    return()
+  }
   nm <- sapply(dat, function(x) {colnames(x)[2]})
   if (length(dat) == 1) {
     price <- dat[[1]][, 2]

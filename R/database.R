@@ -289,9 +289,6 @@ Database <- R6::R6Class(
     # returns ----
 
     update_all_tiingo = function(start_date = NULL, end_date = NULL) {
-      self$check_bucket()
-      self$check_msl()
-      self$check_api_keys()
       msl <- self$msl
       ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
       ticker_vec <- na.omit(ticker_vec)
@@ -308,14 +305,15 @@ Database <- R6::R6Class(
     },
 
     update_tiingo_daily = function(date_start = NULL, date_end = NULL) {
-      self$check_bucket()
-      self$check_msl()
-      self$check_api_keys()
       msl <- self$msl
       ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
       ticker_vec <- na.omit(ticker_vec)
       ticker_vec <- unique(ticker_vec)
-      if (is.null(date_end)) date_end <- last_us_trading_day()
+      hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
+      add_ticker <- ticker_vec[!ticker_vec %in% colnames(hist_ret)]
+      if (is.null(date_end)) {
+        date_end <- last_us_trading_day()
+      }
       if (is.null(date_start)) {
         td <- us_trading_days(date_end - 6, date_end)
         date_start <- td[1]
@@ -324,8 +322,13 @@ Database <- R6::R6Class(
                                        date_start = date_start,
                                        date_end = date_end)
       price_xts <- xts(price[, -1], price[[1]])
-      hist_ret <- read_parquet(self$bucket$path('returns/tiingo.parquet'))
+      hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
       hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
+      add_price <- download_tiingo_tickers(add_ticker, self$api_keys$t_api,
+                                           as.Date('1970-01-01'), date_end)
+      if (!is.null(add_price)) {
+        xts_cbind(hist_ret, add_price)  
+      }
       ret <- price_to_ret(price_xts)
       combo_ret <- xts_rbind(hist_ret, ret)
       combo_ret_df <- xts_to_dataframe(combo_ret)
