@@ -1,14 +1,14 @@
 Package: invdb
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Investment Team Database
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Author: Alejandro Sotolongo
+Maintainer: Alejandro Sotolongo <asotolongo@diversifiedtrust.com>
+Description: invdb contains a collection of functions and a Database R6 object
+    that read and write to the Investment Team's database.
+License: Internal Use
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.2.3
 Depends: xts, allocator, arrow, timeDate, lubridate, httr, jsonlite, bizdays,
-  readxl, xml2, XML
+  readxl, xml2, XML, rvest

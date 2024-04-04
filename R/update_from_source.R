@@ -37,17 +37,21 @@ download_tiingo_csv <- function(ticker, t_api, date_start = '1970-01-01',
 #' @title Download multiple tickers from Tiingo
 #' @param ticker_vec character vector of tickers to download
 #' @param t_api API key
-#' @param date_start first date in time-series to download
+#' @param date_start first date in time-series to download, need to be Date class,
+#'   e.g., as.Date('2024-01-01')
 #' @param date_end last date in time-series to download, if left `NULL` will
 #'   default to today
+#' @param out_ret boolean if TRUE outputs returns, if FALSE outputs prices
+#' @param out_xts boolean, if TRUE outputs xts object, if FALSE returns data.frame
 #' @return xts of price time-series adjusted for dividends and splits
-#' @examples
-#'   \dontrun{
-#'   download_tiingo_tickers(c('AAPL', 'GOOG', 'TSLA'), api_key, '2020-01-01')
-#' }
 #' @export
-download_tiingo_tickers <- function(ticker_vec, t_api, date_start, date_end = NULL) {
+download_tiingo_tickers <- function(ticker_vec, t_api, date_start = NULL,
+                                    date_end = NULL, out_ret = FALSE,
+                                    out_xts = FALSE) {
 
+  if (is.null(date_start)) {
+    date_start <- as.Date('1970-01-01')
+  }
   utick <- unique(ticker_vec)
   if (length(utick) < length(ticker_vec)) {
     warning('duplicated tickers found and removed')
@@ -57,7 +61,8 @@ download_tiingo_tickers <- function(ticker_vec, t_api, date_start, date_end = NU
   dat <- dat[!sapply(dat, is.null)]
   nm <- sapply(dat, function(x) {colnames(x)[2]})
   if (length(dat) == 1) {
-    price <- dat[[1]]
+    price <- dat[[1]][, 2]
+    dt <- dat[[1]][, 1]
   } else {
     dt <- us_trading_days(date_start, date_end)
     price <- matrix(nrow = length(dt), ncol = length(dat))
@@ -70,7 +75,21 @@ download_tiingo_tickers <- function(ticker_vec, t_api, date_start, date_end = NU
   }
   price_df <- data.frame('date' = dt, price)
   colnames(price_df) <- c('date', nm)
-  return(price_df)
+  if (out_ret) {
+    res <- mat_to_xts(price_df)
+    res <- price_to_ret(res)
+    colnames(res) <- nm
+    if (!out_xts) {
+      res <- xts_to_dataframe(res)
+    }
+  } else {
+    res <- price_df
+    if (out_xts) {
+      res <- mat_to_xts(price_df)
+      colnames(res) <- nm
+    }
+  }
+  return(res)
 }
 
 
@@ -235,6 +254,10 @@ download_bd <- function(account_id, api_keys, as_of = NULL) {
   # parse jason and extract data
   rd <- parse_json(response)
   rd <- rd$data
+  if (length(rd) == 0) {
+    warning('no data found')
+    return(NULL)
+  }
   # convert json list into data.frame by looping through each holding
   df <- data.frame(
     assetId = NA,

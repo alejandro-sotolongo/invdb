@@ -70,7 +70,8 @@ Database <- R6::R6Class(
       self$msl <- readxl::read_excel(
         path = 'N:/Investment Team/DATABASES/MDB/Tables/msl.xlsx',
         sheet = 'msl',
-        col_types = c('text', 'text', 'numeric', rep('text', 13))
+        col_types = c('text', 'text', 'numeric', 'numeric',
+                      rep('text', 13), 'numeric')
       )
     },
 
