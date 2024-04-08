@@ -327,7 +327,7 @@ Database <- R6::R6Class(
       add_price <- download_tiingo_tickers(add_ticker, self$api_keys$t_api,
                                            as.Date('1970-01-01'), date_end)
       if (!is.null(add_price)) {
-        xts_cbind(hist_ret, add_price)  
+        xts_cbind(hist_ret, add_price)
       }
       ret <- price_to_ret(price_xts)
       combo_ret <- xts_rbind(hist_ret, ret)
@@ -336,9 +336,6 @@ Database <- R6::R6Class(
     },
 
     update_ctf_daily = function() {
-      self$check_bucket()
-      self$check_msl()
-      self$check_api_keys()
       ix <- self$msl$ReturnSource == 'factset'
       ix[is.na(ix)] <- FALSE
       factset <- self$msl[ix, ]

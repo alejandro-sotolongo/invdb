@@ -1,6 +1,16 @@
-port_from_df <- function(df, nm = 'Port') {
+port_from_holdings <- function(db, dtc_name = NULL, df = NULL,
+                               expand_all = FALSE, nm = 'Port') {
+  if (!is.null(dtc_name)) {
+    df <- read_holdings_file(db$bucket, dtc_name)
+  }
+  if (is.null(df)) {
+    error('must either supply a valid dtc_name or data.frame as df')
+  }
+  mdf <- merge_msl(df, db$msl)
 
 }
+
+
 
 
 #' @title Read Piper Sandler Macro Select Workbook
@@ -221,13 +231,3 @@ port_expand_all <- function(dtc_name, bucket, msl, latest = TRUE) {
 }
 
 
-
-
-# ix <- db$msl$HoldingsSource == 'SEC'
-# ix[is.na(ix)] <- FALSE
-# obs <- db$msl[ix, ]
-# for (i in 1:nrow(obs)) {
-#   df <- read_holdings_file(db$bucket, obs$DTCName[i])
-#   df$pctVal <- df$pctVal / 100
-#   write_parquet(df, db$bucket$path(paste0('holdings/', obs$DTCName[i], '.parquet')))
-# }
