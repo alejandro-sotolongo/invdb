@@ -12,7 +12,15 @@ port_from_holdings <- function(db, dtc_name = NULL, df = NULL,
 
 
 match_ret_df <- function(mdf, ret) {
-
+  freq <- unique(mdf$match$ReturnLib)
+  if ('monthly' %in% freq) {
+    
+  } else {
+    xsrc <- unique(mdf$match$ReturnSource)
+    is_src <- mdf$match$ReturnSource == xsrc[1]
+    ix <- match(mdf$match$ReturnCol[is_src], colnames(ret$d[[xsrc[1]]]))
+    
+  }
 }
 
 

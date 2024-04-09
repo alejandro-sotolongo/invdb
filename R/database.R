@@ -330,9 +330,10 @@ Database <- R6::R6Class(
       hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
       hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
       add_price <- download_tiingo_tickers(add_ticker, self$api_keys$t_api,
-                                           as.Date('1970-01-01'), date_end)
+                                           as.Date('1970-01-01'), date_end,
+                                           out_ret = TRUE, out_xts = TRUE)
       if (!is.null(add_price)) {
-        xts_cbind(hist_ret, add_price)
+        hist_ret <- xts_cbind(hist_ret, add_price)
       }
       ret <- price_to_ret(price_xts)
       combo_ret <- xts_rbind(hist_ret, ret)
@@ -341,7 +342,7 @@ Database <- R6::R6Class(
     },
 
     update_ctf_daily = function() {
-      ix <- self$msl$ReturnSource == 'factset'
+      ix <- self$msl$ReturnSource == 'ctf_d'
       ix[is.na(ix)] <- FALSE
       factset <- self$msl[ix, ]
       res <- list()
@@ -383,7 +384,7 @@ Database <- R6::R6Class(
       ctf_d <- read_parquet(self$bucket$path('returns/daily/ctf_d.parquet'))
       tiingo <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
       ret <- list()
-      ret$d$ctf <- ctf_d
+      ret$d$ctf_d <- ctf_d
       ret$d$tiingo <- tiingo
       ret$m$pdf <- read_parquet(self$bucket$path('returns/monthly/pdf.parquet'))
       self$ret <- ret
