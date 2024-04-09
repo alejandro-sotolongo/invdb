@@ -332,7 +332,7 @@ Database <- R6::R6Class(
       ret <- price_to_ret(price_xts)
       combo_ret <- xts_rbind(hist_ret, ret)
       combo_ret_df <- xts_to_dataframe(combo_ret)
-      write_parquet(combo_ret_df, self$bucket$path('returns/tiingo.parquet'))
+      write_parquet(combo_ret_df, self$bucket$path('returns/daily/tiingo.parquet'))
     },
 
     update_ctf_daily = function() {
