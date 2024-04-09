@@ -7,13 +7,15 @@ Database <- R6::R6Class(
     api_keys = NULL,
     bucket = NULL,
     macro = NULL,
+    ret = NULL,
 
     initialize = function(
       msl = NULL,
       geo = NULL,
       bucket = NULL,
       api_keys = NULL,
-      api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData')
+      api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData',
+      pull_ret = TRUE)
     {
       if (is.null(api_keys)) {
         if (file.exists(api_file)) {
@@ -43,6 +45,9 @@ Database <- R6::R6Class(
       self$geo <- geo
       self$check_geo()
       self$bucket <- bucket
+      if (pull_ret) {
+        self$load_ret()
+      }
     },
 
     # tables -----
@@ -364,6 +369,27 @@ Database <- R6::R6Class(
       combo <- xts_to_dataframe(combo)
       write_parquet(combo, self$bucket$path("returns/daily/ctf_d.parquet"))
     },
+
+
+    update_pdf_funds = function() {
+      wb <- 'N:/Investment Team/CTFs/Private Diversifiers/PDF Workup.xlsx'
+      sht <- 'input_mgr_return'
+      ret <- read_xts(wb, sht, 1)
+      df <- xts_to_dataframe(ret)
+      write_parquet(df, self$bucket$path('returns/monthly/pdf.parquet'))
+    },
+
+    load_ret = function() {
+      ctf_d <- read_parquet(self$bucket$path('returns/daily/ctf_d.parquet'))
+      tiingo <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
+      ret <- list()
+      ret$d$ctf <- ctf_d
+      ret$d$tiingo <- tiingo
+      ret$m$pdf <- read_parquet(self$bucket$path('returns/monthly/pdf.parquet'))
+      self$ret <- ret
+    },
+
+    # macro ----
 
     update_macro = function(fpath = NULL,
                             acwi = 'D_MACRO_SELECT_GLOBAL',
