@@ -384,9 +384,13 @@ Database <- R6::R6Class(
       ctf_d <- read_parquet(self$bucket$path('returns/daily/ctf_d.parquet'))
       tiingo <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
       ret <- list()
-      ret$d$ctf_d <- ctf_d
-      ret$d$tiingo <- tiingo
-      ret$m$pdf <- read_parquet(self$bucket$path('returns/monthly/pdf.parquet'))
+      d <- xts_cbind(
+        mat_to_xts(ctf_d),
+        mat_to_xts(tiingo)
+      )
+      ret$d <- d
+      xpdf <- read_parquet(self$bucket$path('returns/monthly/pdf.parquet'))
+      ret$m <- mat_to_xts(xpdf)
       self$ret <- ret
     },
 

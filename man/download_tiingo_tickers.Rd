@@ -4,26 +4,33 @@
 \alias{download_tiingo_tickers}
 \title{Download multiple tickers from Tiingo}
 \usage{
-download_tiingo_tickers(ticker_vec, t_api, date_start, date_end = NULL)
+download_tiingo_tickers(
+  ticker_vec,
+  t_api,
+  date_start = NULL,
+  date_end = NULL,
+  out_ret = FALSE,
+  out_xts = FALSE
+)
 }
 \arguments{
 \item{ticker_vec}{character vector of tickers to download}
 
 \item{t_api}{API key}
 
-\item{date_start}{first date in time-series to download}
+\item{date_start}{first date in time-series to download, need to be Date class,
+e.g., as.Date('2024-01-01')}
 
 \item{date_end}{last date in time-series to download, if left `NULL` will
 default to today}
+
+\item{out_ret}{boolean if TRUE outputs returns, if FALSE outputs prices}
+
+\item{out_xts}{boolean, if TRUE outputs xts object, if FALSE returns data.frame}
 }
 \value{
 xts of price time-series adjusted for dividends and splits
 }
 \description{
 Download multiple tickers from Tiingo
-}
-\examples{
-  \dontrun{
-  download_tiingo_tickers(c('AAPL', 'GOOG', 'TSLA'), api_key, '2020-01-01')
-}
 }

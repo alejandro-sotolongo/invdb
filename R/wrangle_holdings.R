@@ -1,5 +1,9 @@
-port_from_holdings <- function(db, dtc_name = NULL, df = NULL,
-                               expand_all = FALSE, nm = 'Port') {
+#' @export
+port_from_holdings <- function(db, dtc_name = NULL, df = NULL, 
+                               expand_all = FALSE, nm = 'Port',
+                               incpt = c('first_ret', 'first_wgt'),
+                               reb_freq = c('BH', 'D', 'M', 'Q', 'A')) {
+  incpt <- incpt[1]
   if (!is.null(dtc_name)) {
     df <- read_holdings_file(db$bucket, dtc_name)
   }
@@ -7,20 +11,75 @@ port_from_holdings <- function(db, dtc_name = NULL, df = NULL,
     error('must either supply a valid dtc_name or data.frame as df')
   }
   mdf <- merge_msl(df, db$msl)
-
+  res <- match_ret_df(mdf, db$ret)
+  wgt <- df_to_wgt(mdf$match)
+  if (incpt == 'first_ret') {
+    date_start <- first_comm_start(res$asset_ret)
+    asset_ret <- cut_time(res$asset_ret, date_start)
+  } else {
+    date_start <- index(wgt)[1]
+    asset_ret <- cut_time(res$asset_ret, date_start)
+  }
+  miss <- sum(is.na(asset_ret))
+  if (miss > 0) {
+    warning(paste0(miss, ' NAs found in asset_ret. Replacing with 0s'))
+  }
+  asset_ret[is.na(asset_ret)] <- 0
+  p <- Portfolio$new(
+    name = nm,
+    asset_ret = asset_ret,
+    reb_wgt = wgt
+  )
+  p$lazy_reb_wgt(reb_freq = reb_freq)
+  p$rebal()
+  return(p)
 }
 
 
+#' @export
+df_to_wgt <- function(df) {
+  is_miss <- is.na(df$ReturnCol)
+  if (any(is_miss)) {
+    if (all(is_miss)) {
+      stop('no ReturnCol data found')
+    }
+    warning('NAs found in ReturnCol, removing before pivot_wider')
+    df <- df[!is_miss, ]
+  }
+  wgt <- tidyr::pivot_wider(df, id_cols = returnInfo, names_from = ReturnCol,
+                            values_from = pctVal)
+  mat_to_xts(wgt)
+} 
+
+
+#' @export
 match_ret_df <- function(mdf, ret) {
   freq <- unique(mdf$match$ReturnLib)
+  ret_col <- unique(mdf$match$ReturnCol)
   if ('monthly' %in% freq) {
+    month_bool <- TRUE
+  } else {
+    month_bool <- FALSE
+    ix <- match(ret_col, colnames(ret$d), incomparables = NA)
+  }
+  if (any(is.na(ix))) {
+    miss_col <- ret_col[is.na(ix)] %in% mdf$match$ReturnCol
+    mdf$miss <- rob_rbind(mdf$miss, mdf$match[miss_col, ])
+    mdf$match <- mdf$match[-miss_col, ]
+    if (all(is.na(ix))) {
+      stop('no returns found')
+    }
+    ix <- na.omit(ix)
+  }
+  if (month_bool) {
     
   } else {
-    xsrc <- unique(mdf$match$ReturnSource)
-    is_src <- mdf$match$ReturnSource == xsrc[1]
-    ix <- match(mdf$match$ReturnCol[is_src], colnames(ret$d[[xsrc[1]]]))
-    
+    asset_ret <- ret$d[, ix]
   }
+  res <- list()
+  res$mdf <- mdf
+  res$asset_ret <- asset_ret
+  return(res)
 }
 
 

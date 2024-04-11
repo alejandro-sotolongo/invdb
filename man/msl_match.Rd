@@ -18,6 +18,6 @@ numeric vector with row numbers of the match in the `msl`
 Match securities in a portfolio with the Master Security List
 }
 \details{
-The match will attempt to match the following `df` columns in order: ticker,
-  cusip, name, isin, and identifier
+The match will attempt to match the following `df` columns
+  ticker, cusip, name, isin, lei, and identifier
 }
