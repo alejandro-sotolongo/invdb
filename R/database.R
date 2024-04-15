@@ -280,15 +280,25 @@ Database <- R6::R6Class(
     },
 
     update_factset = function() {
-      self$check_msl()
-      self$check_bucket()
-      self$check_api_keys()
       ids <- na.omit(unique(self$msl$ISIN))
       eps <- download_fs_large_ids(
         self$api_keys,
         ids,
         "FF_EPS(QTR_R,0)"
       )
+    },
+    
+    update_etf = function() {
+      etf <- read_parquet(self$bucket$path('ETF/etf_dict.parquet'))
+      for (i in 1:nrow(etf)) {
+        df <- try(download_sec_nport(etf$FundCIK[i], etf$ParentCIK[i], 'als1012@gmail.com'))
+        if ('try-error' %in% class(df)) {
+          print('could not download')
+          next
+        }
+        write_parquet(df, self$bucket$path(paste0('ETF/nport/', etf$Name[i], '.parquet')))
+        print(paste0(etf$Name[i], ' ', i, ' out of ', nrow(etf)))
+      }
     },
 
     # returns ----
