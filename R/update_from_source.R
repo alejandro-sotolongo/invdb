@@ -483,3 +483,50 @@ download_fs_large_names <- function(api_keys, ids) {
 }
 
 
+eod_list_exchanges <- function(api_keys) {
+  url <- paste0(
+    'https://eodhd.com/api/exchanges-list/?api_token=',
+    api_keys$eod_key,
+    '&fmt=json'
+  )
+  r <- httr::GET(url)
+  json <- jsonlite::parse_json(r)
+  name <- extract_list(json, 'Name')
+  code <- extract_list(json, 'Code')
+  country <- extract_list(json, 'Country')
+  iso2 <- extract_list(json, 'CountryISO2')
+  data.frame(
+    Name = name,
+    Code = code,
+    Country = country,
+    ISO2 = iso2
+  )
+}
+
+
+eod_list_stocks <- function(api_keys, x_code) {
+  url <- paste0(
+    'https://eodhd.com/api/exchange-symbol-list/',
+    x_code,
+    '?api_token=',
+    api_keys$eod_key,
+    '&fmt=json'
+  )
+  r <- httr::GET(url)
+  json <- jsonlite::parse_json(r)
+  code <- extract_list(json, 'Code')
+  name <- extract_list(json, 'Name')
+  country <- extract_list(json, 'Country')
+  exchange <- extract_list(json, 'Exchange')
+  currency <- extract_list(json, 'Currency')
+  type <- extract_list(json, 'Type')
+
+  data.frame(
+    Code = unlist(code),
+    Name = unlist(name),
+    Country = unlist(country),
+    Exchange = unlist(exchange),
+    Currency = unlist(currency),
+    Type = unlist(type)
+  )
+}
