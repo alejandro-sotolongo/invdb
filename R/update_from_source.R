@@ -483,6 +483,7 @@ download_fs_large_names <- function(api_keys, ids) {
 }
 
 
+#' @export
 eod_list_exchanges <- function(api_keys) {
   url <- paste0(
     'https://eodhd.com/api/exchanges-list/?api_token=',
@@ -504,6 +505,7 @@ eod_list_exchanges <- function(api_keys) {
 }
 
 
+#' @export
 eod_list_stocks <- function(api_keys, x_code) {
   url <- paste0(
     'https://eodhd.com/api/exchange-symbol-list/',
@@ -529,4 +531,73 @@ eod_list_stocks <- function(api_keys, x_code) {
     Currency = unlist(currency),
     Type = unlist(type)
   )
+}
+
+
+eod_general <- function(api_keys, code_vec, country_code) {
+  code_vec <- paste0(code_vec, '.', country_code)
+  df <- data.frame(Code = NA, Type = NA, Name = NA, Exchange = NA, 
+                   CurrencyCode = NA, CurrencyName = NA, CountryISO = NA,
+                   CountryName = NA, OpenFigi = NA, ISIN = NA, LEI = NA,
+                   PrimaryTicker = NA, CUSIP = NA, CIK = NA, Sector = NA,
+                   Industry = NA)
+  parse_error <- NA
+  df_error <- NA
+  for (i in 1:length(code_vec)) {
+    print(paste0(code_vec[i], ' ', i, ' out of ', length(code_vec)))
+    url <- paste0(
+      'https://eodhd.com/api/fundamentals/',
+        code_vec[i],
+      '?filter=General&api_token=',
+      api_keys$eod_key,
+      '&fmt=json'      
+    )
+    r <- GET(url)
+    json <- try(parse_json(r), silent = TRUE)
+    if ('try-error' %in% class(json)) {
+      print(paste0(code_vec[i], ' parse error'))
+      parse_error <- c(parse_error, code_vec[i])
+      next
+    }
+    df_i <- try(data.frame(
+      Code = check_null(json, 'Code'),
+      Type = check_null(json, 'Type'),
+      Name = check_null(json, 'Name'),
+      Exchange = check_null(json, 'Exchange'),
+      CurrencyCode = check_null(json, 'CurrencyCode'),
+      CurrencyName = check_null(json, 'CountryName'),
+      CountryISO = check_null(json, 'CountryISO'),
+      CountryName = check_null(json, 'CountryName'),
+      OpenFigi = check_null(json, 'OpenFigi'),
+      ISIN = check_null(json, 'ISIN'),
+      LEI = check_null(json, 'LEI'),
+      PrimaryTicker = check_null(json, 'PrimaryTicker'),
+      CUSIP = check_null(json, 'CUSIP'),
+      CIK = check_null(json, 'CIK'),
+      Sector = check_null(json, 'Sector'),
+      Industry = check_null(json, 'Industry')
+    ))
+    if ('try-error' %in% class(df_i)) {
+      print(paste0(code_vec[i], ' data.frame error'))
+      df_error <- c(df_error, code_vec[i])
+      next
+    }
+    df <- rbind(df, df_i)
+  }
+  res <- list()
+  res$df <- df
+  res$parse_error <- parse_error
+  res$df_error <- df_error
+  return(res)
+}
+
+
+#' @export
+check_null <- function(list, nm) {
+  x <- list[[nm]]
+  if (is.null(x)) {
+    return(NA)
+  } else {
+    return(x)
+  }
 }
