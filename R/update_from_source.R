@@ -534,6 +534,84 @@ eod_list_stocks <- function(api_keys, x_code) {
 }
 
 
+eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
+                          date_end = NULL, out_ret = FALSE, out_xts = FALSE) {
+  if (is.null(date_start)) {
+    date_start <- as.Date('1970-01-01')
+  }
+  if (is.null(date_end)) {
+    date_end <- Sys.Date()
+  }
+  code_vec <- paste0(code_vec, '.', country_code)
+  dat <- list()
+  for (i in 1:length(code_vec)) {
+    print(paste0(code_vec[i], ' ', i, ' out of ', length(code_vec)))
+    url <- paste0(
+      'https://eodhd.com/api/eod/',
+      code_vec[i],
+      '?from=', date_start,
+      '&to=', date_end,
+      '&period=d&api_token=',
+      api_keys$eod_key,
+      '&fmt=json'
+    )
+    r <- GET(url)
+    if (r$status_code == 200) {
+      json <- parse_json(r)
+    } else {
+      print(r$status_code)
+      next
+    }
+    if (length(json) == 0) {
+      dat[[i]] <- NA
+      print(paste0(code_vec[i], ' is empty'))
+    } else {
+      dt <- sapply(json, '[[', 'date')
+      price <- sapply(json, '[[', 'adjusted_close')
+      x <- try(data.frame(as.Date(dt), price), silent = TRUE)
+      if ('try-error' %in% class(x)) {
+        print(paste0('df error'))
+        dat[[i]] <- NA
+        next
+      }
+      colnames(x) <- c('Date', code_vec[i])
+      dat[[i]] <- x
+    }
+  }
+  if (length(dat) == 1) {
+    price <- dat[[1]][, 2]
+    dt <- dat[[1]][, 1]
+    col_nm <- colnames(dat)[2]
+  } else {
+    dt <- us_trading_days(date_start, date_end)
+    price <- matrix(nrow = length(dt), ncol = length(dat))
+    col_nm <- sapply(dat, function(x){colnames(x)[2]})
+    for (i in 1:ncol(price)) {
+      ix <- match(dat[[i]]$Date, dt)
+      price_on_holiday <- is.na(ix)
+      price[na.omit(ix), i] <- dat[[i]][[2]][!price_on_holiday]
+      if (i %% 100 == 0) print(paste0(i, ' out of ', length(dat)))
+    }
+  }
+  price_df <- data.frame('date' = dt, price)
+  colnames(price_df) <- c('date', col_nm)
+  if (out_ret) {
+    res <- mat_to_xts(price_df)
+    res <- price_to_ret(res)
+    colnames(res) <- col_nm
+    if (!out_xts) {
+      res <- xts_to_dataframe(res)
+    }
+  } else {
+    res <- price_df
+    if (out_xts) {
+      res <- mat_to_xts(price_df)
+      colnames(res) <- col_nm
+    }
+  }
+}
+
+
 eod_general <- function(api_keys, code_vec, country_code) {
   code_vec <- paste0(code_vec, '.', country_code)
   df <- data.frame(Code = NA, Type = NA, Name = NA, Exchange = NA, 

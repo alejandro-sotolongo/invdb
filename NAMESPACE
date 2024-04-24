@@ -3,6 +3,7 @@
 export(.fill_ix)
 export(Database)
 export(check_mdf)
+export(check_null)
 export(df_to_wgt)
 export(download_bd)
 export(download_fred)
