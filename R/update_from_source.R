@@ -578,6 +578,8 @@ eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
       dat[[i]] <- x
     }
   }
+  ix <- sapply(dat, function(x) {class(x)[1]})
+  dat <- dat[ix == 'data.frame']
   if (length(dat) == 1) {
     price <- dat[[1]][, 2]
     dt <- dat[[1]][, 1]
@@ -587,7 +589,7 @@ eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
     price <- matrix(nrow = length(dt), ncol = length(dat))
     col_nm <- sapply(dat, function(x){colnames(x)[2]})
     for (i in 1:ncol(price)) {
-      ix <- match(dat[[i]]$Date, dt)
+      ix <- try(match(dat[[i]]$Date, dt))
       price_on_holiday <- is.na(ix)
       price[na.omit(ix), i] <- dat[[i]][[2]][!price_on_holiday]
       if (i %% 100 == 0) print(paste0(i, ' out of ', length(dat)))
@@ -609,6 +611,7 @@ eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
       colnames(res) <- col_nm
     }
   }
+  return(res)
 }
 
 
