@@ -15,7 +15,7 @@ Database <- R6::R6Class(
       bucket = NULL,
       api_keys = NULL,
       api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData',
-      pull_ret = TRUE)
+      pull_ret = FALSE)
     {
       if (is.null(api_keys)) {
         if (file.exists(api_file)) {
@@ -381,7 +381,6 @@ Database <- R6::R6Class(
       write_parquet(combo, self$bucket$path("returns/daily/ctf_d.parquet"))
     },
 
-
     update_pdf_funds = function() {
       wb <- 'N:/Investment Team/CTFs/Private Diversifiers/PDF Workup.xlsx'
       sht <- 'input_mgr_return'
@@ -391,14 +390,14 @@ Database <- R6::R6Class(
     },
 
     load_ret = function() {
-      ctf_d <- read_parquet(self$bucket$path('returns/daily/ctf_d.parquet'))
-      tiingo <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
+      # ctf_d <- read_parquet(self$bucket$path('returns/daily/ctf_d.parquet'))
+      # tiingo <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
       ret <- list()
-      d <- xts_cbind(
-        mat_to_xts(ctf_d),
-        mat_to_xts(tiingo)
-      )
-      ret$d <- d
+      # d <- xts_cbind(
+      #   mat_to_xts(ctf_d),
+      #   mat_to_xts(tiingo)
+      # )
+      # ret$d <- d
       xpdf <- read_parquet(self$bucket$path('returns/monthly/pdf.parquet'))
       ret$m <- mat_to_xts(xpdf)
       self$ret <- ret

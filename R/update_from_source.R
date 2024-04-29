@@ -615,8 +615,8 @@ eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
 }
 
 
-eod_general <- function(api_keys, code_vec, country_code) {
-  code_vec <- paste0(code_vec, '.', country_code)
+eod_general <- function(api_keys, s_df) {
+  code_vec <- paste0(s_df$Code, '.', s_df$Exchange)
   df <- data.frame(Code = NA, Type = NA, Name = NA, Exchange = NA, 
                    CurrencyCode = NA, CurrencyName = NA, CountryISO = NA,
                    CountryName = NA, OpenFigi = NA, ISIN = NA, LEI = NA,
@@ -670,6 +670,29 @@ eod_general <- function(api_keys, code_vec, country_code) {
   res$parse_error <- parse_error
   res$df_error <- df_error
   return(res)
+}
+
+
+eod_fund <- function(api_keys, code_vec, country_code) {
+  url <- paste0(
+    'https://eodhd.com/api/fundamentals/',
+    '000001.SHE',
+    '?api_token=661ec0af0310e9.32152732&fmt=json'
+  )
+  r <- GET(url)
+  json <- parse_json(r)
+}
+
+
+eod_list_country_stocks <- function(x_df, iso2, api_keys) {
+  c_df <- x_df[x_df$ISO2 == iso2, ]
+  s_df <- eod_list_stocks(api_keys = api_keys, x_code = c_df$Code[1])
+  if (nrow(c_df) > 1) {
+    for (i in 2:nrow(c_df)) {
+      x <- eod_list_stocks(api_keys, c_df$Code[i])
+      s_df <- rbind(s_df, x)
+    }
+  } 
 }
 
 

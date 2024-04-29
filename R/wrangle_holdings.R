@@ -54,6 +54,7 @@ df_to_wgt <- function(df) {
 
 #' @export
 match_ret_df <- function(mdf, ret) {
+  # TO-DO: handle mix of monthly and daily returns
   freq <- unique(mdf$match$ReturnLib)
   ret_col <- unique(mdf$match$ReturnCol)
   if ('monthly' %in% freq) {
@@ -61,18 +62,28 @@ match_ret_df <- function(mdf, ret) {
   } else {
     month_bool <- FALSE
     ix <- match(ret_col, colnames(ret$d), incomparables = NA)
-  }
-  if (any(is.na(ix))) {
-    miss_col <- ret_col[is.na(ix)] %in% mdf$match$ReturnCol
-    mdf$miss <- rob_rbind(mdf$miss, mdf$match[miss_col, ])
-    mdf$match <- mdf$match[-miss_col, ]
-    if (all(is.na(ix))) {
-      stop('no returns found')
+    if (any(is.na(ix))) {
+      miss_col <- ret_col[is.na(ix)] %in% mdf$match$ReturnCol
+      mdf$miss <- rob_rbind(mdf$miss, mdf$match[miss_col, ])
+      mdf$match <- mdf$match[-miss_col, ]
+      if (all(is.na(ix))) {
+        stop('no returns found')
+      }
+      ix <- na.omit(ix)
     }
-    ix <- na.omit(ix)
   }
   if (month_bool) {
-    
+    ix <- match(ret_col, colnames(ret$d), incomparables = NA)
+    if (any(is.na(ix))) {
+      miss_col <- ret_col[is.na(ix)] %in% mdf$match$ReturnCol
+      mdf$miss <- rob_rbind(mdf$miss, mdf$match[miss_col, ])
+      mdf$match <- mdf$match[-miss_col, ]
+      if (all(is.na(ix))) {
+        stop('no returns found')
+      }
+      ix <- na.omit(ix)
+      asset_ret <- ret$m[, ix]
+    }      
   } else {
     asset_ret <- ret$d[, ix]
   }
