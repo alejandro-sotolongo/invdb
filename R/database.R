@@ -287,7 +287,7 @@ Database <- R6::R6Class(
         "FF_EPS(QTR_R,0)"
       )
     },
-    
+
     update_etf = function() {
       etf <- read_parquet(self$bucket$path('ETF/etf_dict.parquet'))
       for (i in 1:nrow(etf)) {
