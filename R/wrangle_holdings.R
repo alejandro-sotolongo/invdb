@@ -73,17 +73,17 @@ match_ret_df <- function(mdf, ret) {
     }
   }
   if (month_bool) {
-    ix <- match(ret_col, colnames(ret$d), incomparables = NA)
+    ix <- match(ret_col, colnames(ret$m), incomparables = NA)
     if (any(is.na(ix))) {
       miss_col <- ret_col[is.na(ix)] %in% mdf$match$ReturnCol
       mdf$miss <- rob_rbind(mdf$miss, mdf$match[miss_col, ])
       mdf$match <- mdf$match[-miss_col, ]
-      if (all(is.na(ix))) {
-        stop('no returns found')
-      }
-      ix <- na.omit(ix)
-      asset_ret <- ret$m[, ix]
-    }      
+    }
+    if (all(is.na(ix))) {
+      stop('no returns found')
+    }
+    ix <- na.omit(ix)
+    asset_ret <- ret$m[, ix]
   } else {
     asset_ret <- ret$d[, ix]
   }

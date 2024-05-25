@@ -326,7 +326,7 @@ refresh_bd_key = function(api_keys, save_to_n = FALSE) {
 #'   default "-5" downloads last 5 trading days
 #' @return list with id and xts of returns
 #' @export
-download_fs_ret <- function(id, api_keys, t_minus = "-5") {
+download_fs_ctf_ret <- function(id, api_keys, t_minus = "-5") {
   username <- api_keys$fs$username
   password <- api_keys$fs$password
   base_url <- 'https://api.factset.com/formula-api/v1/time-series?ids=$IDS&formulas='
@@ -342,9 +342,11 @@ download_fs_ret <- function(id, api_keys, t_minus = "-5") {
   response <- httr::GET(request, authenticate(username, password))
   output <- rawToChar(response$content)
   dat <- parse_json(output)
-  dt <- unlist(dat$data[[1]]$result$dates)
-  val <- unlist(dat$data[[1]]$result$values) / 100
-  ret <- xts(val, as.Date(dt))
+  dt <- dat$data[[1]]$result$dates
+  dt[sapply(dt, is.null)] <- NA
+  val <- dat$data[[1]]$result$values
+  val[sapply(val, is.null)] <- NA
+  ret <- xts(unlist(val), as.Date(unlist(dt)))
   return(list(id = id, ret = ret))
 }
 
@@ -534,6 +536,7 @@ eod_list_stocks <- function(api_keys, x_code) {
 }
 
 
+#' @export
 eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
                           date_end = NULL, out_ret = FALSE, out_xts = FALSE) {
   if (is.null(date_start)) {
@@ -615,6 +618,7 @@ eod_total_ret <- function(api_keys, code_vec, country_code, date_start = NULL,
 }
 
 
+#' @export
 eod_general <- function(api_keys, s_df) {
   code_vec <- paste0(s_df$Code, '.', s_df$Exchange)
   df <- data.frame(Code = NA, Type = NA, Name = NA, Exchange = NA, 
@@ -673,6 +677,7 @@ eod_general <- function(api_keys, s_df) {
 }
 
 
+#' @export
 eod_fund <- function(api_keys, code_vec, country_code) {
   url <- paste0(
     'https://eodhd.com/api/fundamentals/',
@@ -683,7 +688,7 @@ eod_fund <- function(api_keys, code_vec, country_code) {
   json <- parse_json(r)
 }
 
-
+#' @export
 eod_list_country_stocks <- function(x_df, iso2, api_keys) {
   c_df <- x_df[x_df$ISO2 == iso2, ]
   s_df <- eod_list_stocks(api_keys = api_keys, x_code = c_df$Code[1])
@@ -704,4 +709,93 @@ check_null <- function(list, nm) {
   } else {
     return(x)
   }
+}
+
+
+#' @export
+read_eod_general <- function(bucket) {
+  files <- db$bucket$ls('co-data/general')
+  df <- read_parquet(bucket$path(files[1]))
+  for (i in 2:length(files)) {
+    x <- read_parquet(bucket$path(files[i]))
+    df <- rbind(df, x)
+  }
+  return(df)
+}
+
+
+#' @export
+eod_match <- function(df, eod_df) {
+  incomp <- c(NA, "")
+  ix_isin <- match(df$isin, eod_df$ISIN, incomparables = incomp)
+  ix_ticker <- match(paste0(df$Ticker, '.', df$invCountry), 
+                     paste0(eod_df$Code, '.', eod_df$CountryISO), 
+                     incomparables = incomp)
+  ix_cusip <- match(df$cusip, eod_df$CUSIP)
+  ix_lei <- match(df$lei, eod_df$LEI)
+  ix <- rep(NA, nrow(df))
+  ix <- .fill_ix(ix, ix_isin)
+  ix <- .fill_ix(ix, ix_ticker)
+  ix <- .fill_ix(ix, ix_cusip)
+  ix <- .fill_ix(ix, ix_lei)
+  return(ix)
+}
+
+
+eod_select_download <- function(port_df, eod_gen_df) {
+  ix <- eod_match(port_df, eod_gen_df)
+  x <- cbind(port_df, eod_gen_df[ix, c('Code', 'Exchange')])
+  miss <- x[is.na(x$Code), ]
+  xmatch <- x[!is.na(x$Code), ]
+  xmatch <- clean_us_exchange(xmatch)
+  df <- data.frame(
+    MarketCap = NA, EBITDA = NA, DividendShare = NA, EarningsShare = NA,
+    ProfitMargin = NA, OperatingMargin = NA, ROA = NA, ROE = NA, 
+    Revenue = NA, RevenueShare = NA, TrailingPE = NA, EV = NA,
+    DivPaid = NA, NetIncome = NA, FreeCashFlow = NA
+  )
+  parse_er <- NA
+  for (i in 1:nrow(xmatch)) {
+    print(paste0(xmatch[i, 'Code'], ' ', i, ' out of ', nrow(xmatch)))
+    url <- paste0(
+      'https://eodhd.com/api/fundamentals/',
+      xmatch[i, 'Code'], '.', xmatch[i, 'Exchange'],
+      '?api_token=661ec0af0310e9.32152732&fmt=json'
+    )
+    r <- GET(url)
+    json <- try(parse_json(r))
+    if ('try-error' %in% class(json)) {
+      parse_er <- c(parse_er, xmatch$Code[i])
+      next
+    }
+    is <- json$Financials$Income_Statement$yearly[[1]]
+    df_i <- data.frame(
+      MarketCap = check_null(json$Highlights, 'MarketCapitilization'),
+      EBITDA = check_null(json$Highlights, 'EBIDTA'),
+      DividendShare = check_null(json$Highlights, 'DividendShare'),
+      EarningsShare = check_null(json$Highlights, 'EarningsShare'),
+      ProfitMargin = check_null(json$Highlights, 'ProfitMargin'),
+      OperatingMargin = check_null(json$Highlights, 'OperatingMargin'),
+      ROA = check_null(json$Highlights, 'ReturnOnAssetsTTM'),
+      ROE = check_null(json$Highlights, 'ReturnOnEquityTTM'),
+      Revenue = check_null(json$Highlights, 'RevanueTTM'),
+      RevenueShare = check_null(json$Highlights, 'RevenueShareTTM'),
+      TrailingPE = check_null(json$Valuation, 'TrailingPE'),
+      EV = check_null(json$Valuation, 'EnterpriseValue'),
+      DivPaid = check_null(is, 'DivPaid'),
+      NetIncome = check_null(is, 'netIncome'),
+      FreeCashFlow = check_null(is, 'freeCashFlow')
+    )
+    df <- rbind(df, df_i)
+  }
+}
+
+
+#' @export
+clean_us_exchange <- function(df) {
+  us_ex <- c('US', 'OTC', 'NYSE', 'NYSE ARCA', 'NMFQS', 'PINK', 'BATS',
+             'NASDAQ', 'OTCQX', 'NYSE MKT', 'OTCMKTS', 'OTCQB', 'OTCGREY',
+             'OTCCE', 'OTCBB', 'AMEX')
+  df$Exchange[df$Exchange %in% us_ex] <- 'US'
+  return(df)
 }

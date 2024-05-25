@@ -14,8 +14,7 @@ Database <- R6::R6Class(
       geo = NULL,
       bucket = NULL,
       api_keys = NULL,
-      api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData',
-      pull_ret = FALSE)
+      api_file = 'N:/Investment Team/DATABASES/MDB/Keys/api_keys.RData')
     {
       if (is.null(api_keys)) {
         if (file.exists(api_file)) {
@@ -45,9 +44,6 @@ Database <- R6::R6Class(
       self$geo <- geo
       self$check_geo()
       self$bucket <- bucket
-      if (pull_ret) {
-        self$load_ret()
-      }
     },
 
     # tables -----
