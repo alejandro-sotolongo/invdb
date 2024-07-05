@@ -485,12 +485,35 @@ download_fs_large_names <- function(api_keys, ids) {
 }
 
 
-read_hfr_ror_file <- function(wb) {
+read_hfr_csv <- function(wb, min_track = 30) {
   raw <- read.csv(wb)
-  meta <- raw[, 1:7]
-  dt <- gsub('X', '', colnames(raw)[8:ncol(raw)])
+  if (min_track > 0) {
+    bad_row <- rowSums(!is.na(raw[, 8:ncol(raw)])) < min_track
+    dat <- raw[!bad_row, ]
+  } else {
+    dat <- raw
+  }
+  res <- tidyr::pivot_longer(dat, starts_with('X'), names_to = 'Date',
+                             values_to = 'Value')
+  dt <- gsub('X', '', res$Date)
   dt <- ymd(paste0(dt, '.01'))
+  dt <- ceiling_date(dt, 'months') - 1
+  res$Date <- dt
+  res$Value <- res$Value / 100
+  return(res)
 }
+
+
+hfr_to_s3 <- function(bucket, s3_file_name, wb = NULL, dat = NULL) {
+  if (!is.null(wb)) {
+    dat <- read_hfr_csv(wb)
+  }
+  if (is.null(dat)) {
+    stop('must provide either wb or dat')
+  }
+  write_parquet(dat, bucket$path(paste0('hfr-files/', s3_file_name, '.parquet')))
+}
+
 
 # EOD Archive ----
 
