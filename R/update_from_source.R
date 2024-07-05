@@ -485,6 +485,12 @@ download_fs_large_names <- function(api_keys, ids) {
 }
 
 
+#' @title Read HFR ROR csv file
+#' @param wb file path of csv
+#' @param min_track length (months) of minimum track record, set to 0 to not
+#'   exclude any funds
+#' @return tibble of returns in tidy longer format to preserve meta-data
+#' @export
 read_hfr_csv <- function(wb, min_track = 30) {
   raw <- read.csv(wb)
   if (min_track > 0) {
@@ -503,7 +509,13 @@ read_hfr_csv <- function(wb, min_track = 30) {
   return(res)
 }
 
-
+#' @title Save HFR ROR data to S3
+#' @param bucket s3 bucket from arrow
+#' @param s3_file_name name to save in s3
+#' @param wb optional file path to load csv file
+#' @param dat optional data.frame or tibble to upload (instead of reading csv)
+#' @return nothing is returned, if successful the file will be uploaded to S3
+#' @export
 hfr_to_s3 <- function(bucket, s3_file_name, wb = NULL, dat = NULL) {
   if (!is.null(wb)) {
     dat <- read_hfr_csv(wb)
@@ -514,6 +526,11 @@ hfr_to_s3 <- function(bucket, s3_file_name, wb = NULL, dat = NULL) {
   write_parquet(dat, bucket$path(paste0('hfr-files/', s3_file_name, '.parquet')))
 }
 
+hfr_pivot_ret <- function(df) {
+  r <- tidyr::pivot_wider(df[, c('FUND_NAME', 'Date', 'Value')], 
+                          names_from = FUND_NAME, values_from = Value)
+  return(r)
+}
 
 # EOD Archive ----
 
