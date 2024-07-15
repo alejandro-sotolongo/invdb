@@ -509,6 +509,7 @@ read_hfr_csv <- function(wb, min_track = 30) {
   return(res)
 }
 
+
 #' @title Save HFR ROR data to S3
 #' @param bucket s3 bucket from arrow
 #' @param s3_file_name name to save in s3
@@ -516,7 +517,7 @@ read_hfr_csv <- function(wb, min_track = 30) {
 #' @param dat optional data.frame or tibble to upload (instead of reading csv)
 #' @return nothing is returned, if successful the file will be uploaded to S3
 #' @export
-hfr_to_s3 <- function(bucket, s3_file_name, wb = NULL, dat = NULL) {
+hfr_csv_to_s3 <- function(bucket, s3_file_name, wb = NULL, dat = NULL) {
   if (!is.null(wb)) {
     dat <- read_hfr_csv(wb)
   }
@@ -526,11 +527,80 @@ hfr_to_s3 <- function(bucket, s3_file_name, wb = NULL, dat = NULL) {
   write_parquet(dat, bucket$path(paste0('hfr-files/', s3_file_name, '.parquet')))
 }
 
-hfr_pivot_ret <- function(df) {
-  r <- tidyr::pivot_wider(df[, c('FUND_NAME', 'Date', 'Value')], 
+
+#' @export
+hfr_csv_to_xts <- function(df) {
+  r <- tidyr::pivot_wider(df[, c('FUND_NAME', 'Date', 'Value')],
                           names_from = FUND_NAME, values_from = Value)
+  r <- xts(r[, -1], as.Date(r[[1]]))
   return(r)
 }
+
+
+#' @export
+read_hfr_asci <- function(fpath) {
+  ror <- read.table(paste0(fpath, 'ASCII_Ror.txt'), sep = ',', header = TRUE)
+  ror$Date <- as.Date(ror$Date, format = '%m/%d/%Y')
+  meta <- read.table(paste0(fpath, 'ASCII_Fund.txt'), sep = ',', header = TRUE)
+  res <- list()
+  res$ror <- ror
+  res$meta <- meta
+  return(res)
+}
+
+
+#' @export
+hfr_asci_to_s3 <- function(fpath, bucket, s3_file_name) {
+  dat <- read_hfr_asci(fpath)
+  write_parquet(dat$ror, bucket$path(
+    paste0('hfr-files/', s3_file_name, '-ror', '.parquet')))
+  write_parquet(dat$meta, bucket$path(
+    paste0('hfr-files/', s3_file_name, '-meta', '.parquet')))
+}
+
+
+#' @export
+read_dtc_hf <- function(
+    wb = 'N:/Investment Team/CTFs/Private Diversifiers/PDF Workup 2.xlsm',
+    ror_sht = 'ret',
+    meta_sht = 'meta',
+    ror_skip = 0) {
+
+  ror <- read_xts(wb, ror_sht, ror_skip)
+  meta <- readxl::read_excel(wb, meta_sht)
+  res <- list()
+  res$ror <- ror
+  res$meta <- meta
+  return(res)
+}
+
+
+#' @export
+dtc_hf_to_s3 <- function(
+    wb = 'N:/Investment Team/CTFs/Private Diversifiers/PDF Workup 2.xlsm',
+    ror_sht = 'ret',
+    meta_sht = 'meta',
+    ror_skip = 0,
+    bucket) {
+
+  dat <- read_dtc_hf(wb, ror_sht, meta_sht, ror_skip)
+  ror <- xts_to_dataframe(dat$ror)
+  ror <- tidyr::pivot_longer(ror, -Date, values_to = 'Performance',
+                             names_to = 'Fund')
+  ror$Performance <- ror$Performance * 100
+  write_parquet(ror, bucket$path('hfr-files/dtc-ror.parquet'))
+  write_parquet(dat$meta, bucket$path('hfr-files/dtc-meta.parquet'))
+}
+
+
+hfr_asci_to_xts <- function(df) {
+  r <- pivot_wider(df[, c('Fund', 'Date', 'Performance')],
+                   id_cols = Date, id_expand = TRUE,
+                   names_from = Fund, values_from = Performance)
+  r <- xts(r[, -1], as.Date(r[[1]]))
+  return(r)
+}
+
 
 # EOD Archive ----
 
