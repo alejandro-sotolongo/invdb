@@ -17,3 +17,9 @@ extract_list <- function(x, nm) {
   y[sapply(y, is.null)] <- NA
   unlist(y)
 }
+
+#' @export
+list_replace_null <- function(x) {
+  x[sapply(x, is.null)] <- NA
+  return(x)
+}

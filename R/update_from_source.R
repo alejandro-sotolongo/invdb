@@ -389,7 +389,7 @@ download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
 
 #' @export
 download_fs_large_ids <- function(api_keys, ids, formulas) {
-  if (ids < 100) {
+  if (length(ids) < 100) {
     warning("function is for over 100 ids, returning NULL")
     return()
   }

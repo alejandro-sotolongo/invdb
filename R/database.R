@@ -121,6 +121,9 @@ Database <- R6::R6Class(
       if (is.null(self$msl)) {
         x <- try(self$read_msl())
         if ('data.frame' %in% class(x)) {
+          if (sum(duplicated(x$DTCName))) {
+            warning('duplicated DTCNames found')
+          }
           return('pass')
         } else {
           stop('msl is missing and could not auto load')
@@ -128,6 +131,9 @@ Database <- R6::R6Class(
       } else {
         if ('data.frame' %in% class(self$msl)) {
           return('pass')
+          if (sum(duplicated(x$DTCName))) {
+            warning('duplicated DTCNames found')
+          }
         } else {
           stop('msl is not a data.frame')
         }
@@ -220,7 +226,8 @@ Database <- R6::R6Class(
       return(df)
     },
 
-    update_all_port = function(user_email = NULL, as_of = NULL, update_csv = FALSE) {
+    update_all_port = function(user_email = NULL, as_of = NULL, 
+                               update_csv = FALSE) {
       if (is.null(user_email)) user_email <- 'asotolongo@diversifiedtrust.com'
       ix <- self$msl$HoldingsSource == 'SEC'
       ix[is.na(ix)] <- FALSE
@@ -230,7 +237,8 @@ Database <- R6::R6Class(
       } else {
         print('updating SEC')
         for (i in 1:nrow(sec)) {
-          print(paste0('updating ', sec$DTCName[i], ' ', i, ' out of ', nrow(sec)))
+          print(paste0('updating ', sec$DTCName[i], ' ', i, ' out of ', 
+                       nrow(sec)))
           self$update_holding(sec$DTCName[i], as_of, user_email)
         }
       }
@@ -242,7 +250,8 @@ Database <- R6::R6Class(
       } else {
         print('updating BD')
         for (i in 1:nrow(bd)) {
-          print(paste0('updating ', bd$DTCName[i], ' ', i, ' out of ', nrow(bd)))
+          print(paste0('updating ', bd$DTCName[i], ' ', i, ' out of ', 
+                       nrow(bd)))
           self$update_holding(bd$DTCName[i], as_of, user_email)
         }
       }
@@ -347,6 +356,73 @@ Database <- R6::R6Class(
       write_parquet(combo_ret_df, self$bucket$path('returns/daily/tiingo.parquet'))
     },
 
+    update_fs_ret_daily = function(days_back = 0) {
+      old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
+      old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
+      msl <- self$msl
+      fs <- subset_df(msl, 'ReturnSource', 'factset')
+      ids <- fs$ISIN
+      ids[is.na(ids)] <- fs$CUSIP[is.na(ids)]
+      ids[is.na(ids)] <- fs$SEDOL[is.na(ids)]
+      ids[is.na(ids)] <- fs$LEI[is.na(ids)]
+      ids[is.na(ids)] <- fs$Identifier[is.na(ids)]
+      if (length(ids) > 100) {
+        iter <- iter <- seq(1, length(ids), 100)
+        iter[length(iter)] <- length(ids)
+        ret_list <- list()
+      } else {
+        mid <- round(length(ids) / 2, 0)
+        iter <- seq(1, mid, length(ids))
+      }
+      for (i in 1:(length(iter)-1)) {
+        xids <- ids[iter[i]:iter[i+1]]
+        json <- download_fs(
+          api_keys = self$api_keys,
+          ids = xids,
+          formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
+          type = 'ts'
+        ) 
+        dat <- json$data
+        res <- lapply(dat, '[[', 'result')
+        dt <- sapply(res, '[[', 'dates')
+        dt <- sort(unique(unlist(dt)))
+        val_mat <- matrix(nrow = length(dt), ncol = length(res))
+        for (j in 1:length(res)) {
+          if (all(c('dates', 'values') %in% names(res[[j]]))) {
+            xdt <- unlist(res[[j]]$dates)
+            date_match <- match(xdt, dt)
+            res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
+            xval <- unlist(res[[j]]$values)
+          } else {
+            warning(paste0(dat[[j]]$requestId, ' not properly structured'))
+            date_match <- 1:length(dt)
+            xval <- rep(NA, length(dt))
+          }
+          val_mat[date_match, j] <- xval 
+        }
+        if (any(is.na(xids))) {
+          miss_ids <- which(is.na(xids))
+          colnames(val_mat) <- msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
+        } else {
+          colnames(val_mat) <- msl$DTCName[iter[i]:iter[i+1]]
+        }
+        ret_list$ret[[i]] <- val_mat
+        ret_list$dt[[i]] <- dt
+        print(iter[i])
+      }
+      ret <- do.call('cbind', ret_list$ret)
+      ret <- ret / 100
+      dt <- unique(unlist(ret_list$dt))
+      if (length(dt) != nrow(ret)) {
+        warning("dates and returns don't match, return list")
+        return(ret_list)
+      }
+      ret <- xts(ret, as.Date(dt))
+      ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
+      ret_df <- xts_to_dataframe(ret_update)
+      write_parquet(ret_df, self$bucket$path('returns/daily/factset.parquet'))
+    },
+    
     update_ctf_daily = function() {
       ix <- self$msl$ReturnSource == 'ctf_d'
       ix[is.na(ix)] <- FALSE

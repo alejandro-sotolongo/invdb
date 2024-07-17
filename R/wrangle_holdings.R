@@ -52,6 +52,7 @@ df_to_wgt <- function(df) {
 } 
 
 
+#' @param ret list of returns, ret$d = daily, ret$m = monthly
 #' @export
 match_ret_df <- function(mdf, ret) {
   # TO-DO: handle mix of monthly and daily returns
