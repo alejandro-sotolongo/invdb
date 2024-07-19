@@ -23,3 +23,8 @@ list_replace_null <- function(x) {
   x[sapply(x, is.null)] <- NA
   return(x)
 }
+
+#' @export
+month_end <- function(dt) {
+  lubridate::ceiling_date(as.Date(dt), 'months') - 1
+}

@@ -355,12 +355,10 @@ Database <- R6::R6Class(
       combo_ret_df <- xts_to_dataframe(combo_ret)
       write_parquet(combo_ret_df, self$bucket$path('returns/daily/tiingo.parquet'))
     },
-
-    update_fs_ret_daily = function(days_back = 0) {
-      old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
-      old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
-      msl <- self$msl
-      fs <- subset_df(msl, 'ReturnSource', 'factset')
+    
+    
+    filter_fs_ids = function() {
+      fs <- subset_df(self$msl, 'ReturnSource', 'factset')
       ids <- fs$ISIN
       ids[is.na(ids)] <- fs$CUSIP[is.na(ids)]
       ids[is.na(ids)] <- fs$SEDOL[is.na(ids)]
@@ -374,13 +372,148 @@ Database <- R6::R6Class(
         mid <- round(length(ids) / 2, 0)
         iter <- seq(1, mid, length(ids))
       }
+      ids <- gsub(' ', '', ids)
+      res <- list()
+      res$ids <- ids
+      res$iter <- iter
+      return(res)
+    },
+
+    # run after each quarter update of financial data from factset,
+    # takes latest data point of time-series of financial data for each
+    # company and put's into one data.frame
+    update_fs_fina_most_recent = function() {
+      dat <- list()
+      dat$pe <- read_feather(self$bucket$path('co-data/arrow/PE.arrow'))
+      dat$pb <- read_feather(self$bucket$path('co-data/arrow/PB.arrow'))
+      dat$pfcf <- read_feather(self$bucket$path('co-data/arrow/PFCF.arrow'))
+      dat$dy <- read_feather(self$bucket$path('co-data/arrow/DY.arrow'))
+      dat$roe <- read_feather(self$bucket$path('co-data/arrow/ROE.arrow'))
+      dat$mcap <- read_feather(self$bucket$path('co-data/arrow/MCAP.arrow'))
+      dat <- lapply(dat, function(x) {xts(x[, -1], as.Date(x[[1]]))})
+      dat <- lapply(dat, fill_na_price)
+      all_co <- unlist(unique(lapply(dat, colnames)))
+      fina <- matrix(nrow = length(all_co), ncol = length(dat))
+      for (i in 1:length(dat)) {
+        co_match <- match(colnames(dat[[i]]), all_co)
+        fina[co_match, i] <- dat[[i]][nrow(dat[[i]]), ]
+      }
+      # will need to adjust colnames below if fields are changed
+      colnames(fina) <- c('PE', 'PB', 'PFCF', 'DY', 'ROE', 'MCAP')
+      fina_df <- data.frame(DTCName = all_co, fina)
+      write_feather(fina_df, self$bucket$path('co-data/arrow/latest-fina.arrow'))
+      as_of <- sapply(dat, function(x) {zoo::index(x)[nrow(x)]})
+      # will need to adust as_of_df below if fields are changed
+      as_of_df <- data.frame(
+        Field = c('PE', 'PB', 'PFCF', 'DY', 'ROE', 'MCAP'),
+        AsOf = as.Date(as_of)
+      )
+      write_feather(as_of_df, self$bucket$path('co-data/arrow/fina-as-of.arrow'))
+    },
+    
+    # Update Factset financial data for stock universe each quarter
+    # yrs_back = how many years back to pull data
+    # will save arrow and parquet files to S3
+    update_fs_fina_quarterly = function(yrs_back = 1, 
+      dtype = c('PE', 'PB', 'PFCF', 'DY', 'ROE', 'MCAP')) {
+      # TO-DO read old file and and new row
+      if (dtype == 'PE') {
+        formulas <- paste0('FG_PE(-', yrs_back, 'AY,NOW,CQ)')
+      } else if (dtype == 'PB') {
+        formulas <- paste0('FG_PBK(QTR_R,-', yrs_back, 'AY,NOW,CQ')
+      } else if (dtype == 'PFCF') {
+        formulas <- paste0('FG_CFLOW_FREE_EQ_PS(-', yrs_back, 'AY,NOW,CQ,USD)') 
+      } else if (dtype == 'DY') {
+        formulas <- paste0('FG_DIV_YLD(-', yrs_back, 'AY,NOW,CQ)')
+      } else if (dtype == 'ROE') {
+        formulas <- paste0('FG_ROE(-', yrs_back, 'AY,NOW,CQ)')
+      } else if (dtype == 'MCAP') {
+        formulas <- paste0('FF_MKT_VAL(ANN_R,-', yrs_back, 'AY,NOW,CQ,,USD)')
+      } else {
+        stop("dtype must be 'PE', 'PB', 'PFCF', 'DY', 'ROE', or 'MCAP'")
+      }
+      res <- self$filter_fs_ids()
+      ids <- res$ids
+      iter <- res$iter
+      fund_list <- list()
+      for (i in 1:(length(iter)-1)) {
+        xids <- ids[iter[i]:iter[i+1]]
+        json <- download_fs(
+          api_keys = self$api_keys,
+          ids = xids,
+          formulas = formulas,
+          type = 'cs'
+        ) 
+        dat <- json$data
+        res <- lapply(dat, '[[', 'result')
+        dt <- sapply(res, '[[', 'dates')
+        dt <- sort(unique(unlist(dt)))
+        val_mat <- matrix(nrow = length(dt), ncol = length(res))
+        for (j in 1:length(res)) {
+          if (all(c('dates', 'values') %in% names(res[[j]]))) {
+            miss_date <- sapply(res[[j]]$dates, is.null)
+            res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
+            xdt <- unlist(res[[j]]$dates)
+            date_match <- match(xdt, dt)
+            xval <- unlist(res[[j]]$values)
+            xval <- xval[!miss_date]
+          } else {
+            warning(paste0(dat[[j]]$requestId, ' not properly structured'))
+            date_match <- 1:length(dt)
+            xval <- rep(NA, length(dt))
+          }
+          val_mat[date_match, j] <- xval 
+        }
+        if (any(is.na(xids))) {
+          miss_ids <- which(is.na(xids))
+          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
+        } else {
+          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
+        }
+        fund_list$val[[i]] <- val_mat
+        fund_list$dt[[i]] <- dt
+        print(iter[i])
+      }
+      udt <- unique(unlist(fund_list$dt))
+      m_vec <- sapply(fund_list$val, ncol)
+      cum_m_vec <- cumsum(m_vec)
+      fund_mat <- matrix(nrow = length(udt), ncol = sum(m_vec))
+      date_match <- match(fund_list$dt[[1]], udt)
+      fund_mat[date_match, 1:m_vec[1]] <- fund_list$val[[1]]
+      for (i in 2:length(cum_m_vec)) {
+        dm <- match(fund_list$dt[[i]], udt)
+        fund_mat[dm, (cum_m_vec[i-1]+1):cum_m_vec[i]] <- fund_list$val[[i]]
+      }
+      fund_df <- data.frame(Date = month_end(udt), fund_mat)
+      colnames(fund_df)[-1] <- unlist(sapply(fund_list$val, colnames))
+      write_feather(
+        fund_df, 
+        self$bucket$path(paste0('co-data/arrow/', dtype, '.arrow'))
+      )
+      write_parquet(
+        fund_df,
+        self$bucket$path(paste0('co-data/parquet', dtype, '.parquet'))
+      )
+    },
+    
+    
+    # updates factset returns every day in overnight routine
+    # days_back: how many weekdays days (includes U.S. holidays) to pull, 
+    #  default is zero, meaning just yesterday's return
+    update_fs_ret_daily = function(days_back = 0) {
+      old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
+      old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
+      res <- self$filter_fs_ids()
+      iter <- res$iter
+      ids <- res$ids
+      ret_list <- list()
       for (i in 1:(length(iter)-1)) {
         xids <- ids[iter[i]:iter[i+1]]
         json <- download_fs(
           api_keys = self$api_keys,
           ids = xids,
           formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
-          type = 'ts'
+          type = 'cs'
         ) 
         dat <- json$data
         res <- lapply(dat, '[[', 'result')
@@ -402,9 +535,9 @@ Database <- R6::R6Class(
         }
         if (any(is.na(xids))) {
           miss_ids <- which(is.na(xids))
-          colnames(val_mat) <- msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
+          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
         } else {
-          colnames(val_mat) <- msl$DTCName[iter[i]:iter[i+1]]
+          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
         }
         ret_list$ret[[i]] <- val_mat
         ret_list$dt[[i]] <- dt
@@ -421,6 +554,7 @@ Database <- R6::R6Class(
       ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
       ret_df <- xts_to_dataframe(ret_update)
       write_parquet(ret_df, self$bucket$path('returns/daily/factset.parquet'))
+      write_arrow(ret_df, self$bucket$path('returns/daily/factset.arrow'))
     },
     
     update_ctf_daily = function() {

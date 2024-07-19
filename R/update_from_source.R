@@ -387,6 +387,33 @@ download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
 }
 
 
+download_fs_gp <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
+  if (type[1] == 'ts') {
+    struc <- 'time-series'
+  } else {
+    struc <- 'cross-sectional'
+  }
+  username <- api_keys$fs$username
+  password <- api_keys$fs$password
+  ids[is.na(ids)] <- ""
+  request <- paste0(
+    "https://api.factset.com/formula-api/v1/",
+    struc,
+    "?ids=",
+    paste0(ids, collapse = ","),
+    "&formulas=",
+    paste0(formulas, collapse = ",")
+  )
+  response <- httr::GET(request, authenticate(username, password))
+  print(response$status)
+  output <- rawToChar(response$content)
+  #json <- fromJSON(output)[["data"]]
+  json <- parse_json(output)
+  return(json)
+}
+
+
+
 #' @export
 download_fs_large_ids <- function(api_keys, ids, formulas) {
   if (length(ids) < 100) {
