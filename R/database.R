@@ -357,7 +357,7 @@ Database <- R6::R6Class(
     },
     
     
-    filter_fs_ids = function() {
+    filter_fs_ids = function(max_iter_by = 100) {
       fs <- subset_df(self$msl, 'ReturnSource', 'factset')
       ids <- fs$ISIN
       ids[is.na(ids)] <- fs$CUSIP[is.na(ids)]
@@ -365,7 +365,7 @@ Database <- R6::R6Class(
       ids[is.na(ids)] <- fs$LEI[is.na(ids)]
       ids[is.na(ids)] <- fs$Identifier[is.na(ids)]
       if (length(ids) > 100) {
-        iter <- iter <- seq(1, length(ids), 100)
+        iter <- iter <- seq(1, length(ids), (max_iter_by-1))
         iter[length(iter)] <- length(ids)
         ret_list <- list()
       } else {
@@ -500,62 +500,88 @@ Database <- R6::R6Class(
     # updates factset returns every day in overnight routine
     # days_back: how many weekdays days (includes U.S. holidays) to pull, 
     #  default is zero, meaning just yesterday's return
-    update_fs_ret_daily = function(days_back = 0) {
-      old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
-      old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
-      res <- self$filter_fs_ids()
-      iter <- res$iter
-      ids <- res$ids
-      ret_list <- list()
-      for (i in 1:(length(iter)-1)) {
-        xids <- ids[iter[i]:iter[i+1]]
-        json <- download_fs(
+    # update_fs_ret_daily = function(days_back = 0) {
+    #   old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
+    #   old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
+    #   res <- self$filter_fs_ids()
+    #   iter <- res$iter
+    #   ids <- res$ids
+    #   ret_list <- list()
+    #   for (i in 1:(length(iter)-1)) {
+    #     xids <- ids[iter[i]:iter[i+1]]
+    #     json <- download_fs(
+    #       api_keys = self$api_keys,
+    #       ids = xids,
+    #       formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
+    #       type = 'cs'
+    #     ) 
+    #     dat <- json$data
+    #     res <- lapply(dat, '[[', 'result')
+    #     dt <- sapply(res, '[[', 'dates')
+    #     dt <- sort(unique(unlist(dt)))
+    #     val_mat <- matrix(nrow = length(dt), ncol = length(res))
+    #     for (j in 1:length(res)) {
+    #       if (all(c('dates', 'values') %in% names(res[[j]]))) {
+    #         xdt <- unlist(res[[j]]$dates)
+    #         date_match <- match(xdt, dt)
+    #         res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
+    #         xval <- unlist(res[[j]]$values)
+    #       } else {
+    #         warning(paste0(dat[[j]]$requestId, ' not properly structured'))
+    #         date_match <- 1:length(dt)
+    #         xval <- rep(NA, length(dt))
+    #       }
+    #       val_mat[date_match, j] <- xval 
+    #     }
+    #     if (any(is.na(xids))) {
+    #       miss_ids <- which(is.na(xids))
+    #       colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
+    #     } else {
+    #       colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
+    #     }
+    #     ret_list$ret[[i]] <- val_mat
+    #     ret_list$dt[[i]] <- dt
+    #     print(iter[i])
+    #   }
+    #   ret <- do.call('cbind', ret_list$ret)
+    #   ret <- ret / 100
+    #   dt <- unique(unlist(ret_list$dt))
+    #   if (length(dt) != nrow(ret)) {
+    #     warning("dates and returns don't match, return list")
+    #     return(ret_list)
+    #   }
+    #   ret <- xts(ret, as.Date(dt))
+    #   ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
+    #   ret_df <- xts_to_dataframe(ret_update)
+    #   write_parquet(ret_df, self$bucket$path('returns/daily/factset.parquet'))
+    #   write_arrow(ret_df, self$bucket$path('returns/daily/factset.arrow'))
+    # },
+    
+    
+    update_fs_ret_daily = function() {
+      res <- self$filter_fs_ids(50)
+      df <- data.frame()
+      res$ids <- na.omit(res$ids)
+      for (i in 1:(length(res$iter)-1)) {
+        json <- download_fs_gp(
           api_keys = self$api_keys,
-          ids = xids,
-          formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
-          type = 'cs'
-        ) 
-        dat <- json$data
-        res <- lapply(dat, '[[', 'result')
-        dt <- sapply(res, '[[', 'dates')
-        dt <- sort(unique(unlist(dt)))
-        val_mat <- matrix(nrow = length(dt), ncol = length(res))
-        for (j in 1:length(res)) {
-          if (all(c('dates', 'values') %in% names(res[[j]]))) {
-            xdt <- unlist(res[[j]]$dates)
-            date_match <- match(xdt, dt)
-            res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
-            xval <- unlist(res[[j]]$values)
-          } else {
-            warning(paste0(dat[[j]]$requestId, ' not properly structured'))
-            date_match <- 1:length(dt)
-            xval <- rep(NA, length(dt))
-          }
-          val_mat[date_match, j] <- xval 
-        }
-        if (any(is.na(xids))) {
-          miss_ids <- which(is.na(xids))
-          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
-        } else {
-          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
-        }
-        ret_list$ret[[i]] <- val_mat
-        ret_list$dt[[i]] <- dt
-        print(iter[i])
+          ids = res$ids[res$iter[i]:res$iter[i+1]],
+          date_start = '2019-01-01',
+          date_end = '2024-07-29',
+          freq = 'D'
+        )
+        df <- rob_rbind(df, flatten_fs_gp(json))
+        print(res$iter[i])
       }
-      ret <- do.call('cbind', ret_list$ret)
-      ret <- ret / 100
-      dt <- unique(unlist(ret_list$dt))
-      if (length(dt) != nrow(ret)) {
-        warning("dates and returns don't match, return list")
-        return(ret_list)
-      }
-      ret <- xts(ret, as.Date(dt))
-      ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
-      ret_df <- xts_to_dataframe(ret_update)
-      write_parquet(ret_df, self$bucket$path('returns/daily/factset.parquet'))
-      write_arrow(ret_df, self$bucket$path('returns/daily/factset.arrow'))
+      ix <- request_id_match_msl(df$requestId, self$msl)
+      df$DTCName <- self$msl$DTCName[ix]
+      df$totalReturn <- df$totalReturn / 100
+      wdf <- pivot_wider(df, id_cols = date, values_from = totalReturn,
+                         names_from = DTCName)
+      wdf <- as.data.frame(wdf)
+      write_feather(wdf, self$bucket$path('returns/daily/factset.arrow'))
     },
+    
     
     update_ctf_daily = function() {
       ix <- self$msl$ReturnSource == 'ctf_d'

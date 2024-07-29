@@ -387,32 +387,62 @@ download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
 }
 
 
-download_fs_gp <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
-  if (type[1] == 'ts') {
-    struc <- 'time-series'
-  } else {
-    struc <- 'cross-sectional'
-  }
+#' @title Download Factset Global Prices
+#' @param api_keys list with factset api keys
+#' @param ids requested security identifiers, can by tickers, SEDOL, ISIN, 
+#'   CUSIP, or FactSet Permanent Id
+#' @param date_start string in YYYY-MM-DD format
+#' @param date_end same
+#' @param freq string, "D" = daily
+#' @return json object of total returns
+#' @export
+download_fs_gp <- function(api_keys, ids, date_start, date_end, freq = 'D') {
   username <- api_keys$fs$username
   password <- api_keys$fs$password
   ids[is.na(ids)] <- ""
-  request <- paste0(
-    "https://api.factset.com/formula-api/v1/",
-    struc,
-    "?ids=",
-    paste0(ids, collapse = ","),
-    "&formulas=",
-    paste0(formulas, collapse = ",")
+  url <- "https://api.factset.com/content/factset-global-prices/v1/returns"
+  request <- list(
+    ids = as.list(ids),
+    startDate = date_start,
+    endDate = date_end,
+    frequency = freq,
+    dividendAdjust = "EXDATE_C",
+    batch = "N"
   )
-  response <- httr::GET(request, authenticate(username, password))
-  print(response$status)
+  response <- httr::POST(
+    url, authenticate(username, password), body = request, 
+    add_headers(Accept = 'application/json'), encode = 'json')
   output <- rawToChar(response$content)
-  #json <- fromJSON(output)[["data"]]
   json <- parse_json(output)
   return(json)
 }
 
 
+#' @title Convert json output of factset global prices into data.frame
+#' @param json download from `download_fs_gp` function
+#' @export
+#' @note see download_fs_gp
+flatten_fs_gp <- function(json) {
+  dat <- json$data
+  requestId <- sapply(dat, '[[', 'requestId')
+  if (is.list(requestId)) {
+    requestId <- unlist(list_replace_null(requestId))
+  }
+  date <- sapply(dat, '[[', 'date')
+  if (is.list(date)) {
+    date <- unlist(list_replace_null(date))
+  }
+  totalReturn <- sapply(dat, '[[', 'totalReturn')
+  if (is.list(totalReturn)) { 
+    totalReturn <- unlist(list_replace_null(totalReturn))
+  }
+  df <- data.frame(
+    requestId = requestId,
+    date = date,
+    totalReturn = totalReturn
+  )
+  return(df)
+}
 
 #' @export
 download_fs_large_ids <- function(api_keys, ids, formulas) {
