@@ -364,6 +364,7 @@ Database <- R6::R6Class(
       ids[is.na(ids)] <- fs$SEDOL[is.na(ids)]
       ids[is.na(ids)] <- fs$LEI[is.na(ids)]
       ids[is.na(ids)] <- fs$Identifier[is.na(ids)]
+      ids <- na.omit(ids)
       if (length(ids) > 100) {
         iter <- iter <- seq(1, length(ids), (max_iter_by-1))
         iter[length(iter)] <- length(ids)
@@ -558,16 +559,37 @@ Database <- R6::R6Class(
     # },
     
     
-    update_fs_ret_daily = function() {
-      res <- self$filter_fs_ids(50)
+    update_fs_ret_daily = function(ids = NULL, date_start = NULL, 
+                                   date_end = NULL) {
+      old_ret <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
+      old_xts <- df_to_xts(old_ret)
+      if (is.null(ids)) {
+        res <- self$filter_fs_ids(50)
+      } else {
+        res <- list()
+        if (length(ids) > 50) {
+          iter <- seq(1, length(ids), 49)
+          iter[length(iter)] <- length(ids)
+        } else {
+          iter <- c(1, length(ids))
+        }
+        res$ids <- ids
+        res$iter <- iter
+      }
+      if (is.null(date_start)) {
+        date_start <- Sys.Date() - 1
+      }
+      if (is.null(date_end)) {
+        date_end <- Sys.Date() - 1
+      }
       df <- data.frame()
       res$ids <- na.omit(res$ids)
       for (i in 1:(length(res$iter)-1)) {
         json <- download_fs_gp(
           api_keys = self$api_keys,
           ids = res$ids[res$iter[i]:res$iter[i+1]],
-          date_start = '2019-01-01',
-          date_end = '2024-07-29',
+          date_start = date_start,
+          date_end = date_end,
           freq = 'D'
         )
         df <- rob_rbind(df, flatten_fs_gp(json))
@@ -576,10 +598,14 @@ Database <- R6::R6Class(
       ix <- request_id_match_msl(df$requestId, self$msl)
       df$DTCName <- self$msl$DTCName[ix]
       df$totalReturn <- df$totalReturn / 100
+      is_dup <- duplicated(paste0(df$DTCName, df$date))
+      df <- df[!is_dup, ]
       wdf <- pivot_wider(df, id_cols = date, values_from = totalReturn,
                          names_from = DTCName)
-      wdf <- as.data.frame(wdf)
-      write_feather(wdf, self$bucket$path('returns/daily/factset.arrow'))
+      wxts <- df_to_xts(wdf)
+      combo <- rob_rbind(wxts, old_xts)
+      df_out <- xts_to_dataframe(combo)
+      write_feather(df_out, self$bucket$path('returns/daily/factset.arrow'))
     },
     
     
@@ -669,6 +695,5 @@ Database <- R6::R6Class(
       intl <- read_parquet(self$bucket$path('holdings/International Equity.parquet'))
 
     }
-
   )
 )
