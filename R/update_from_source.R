@@ -423,6 +423,12 @@ download_fs_gp <- function(api_keys, ids, date_start, date_end, freq = 'D') {
 #' @export
 #' @note see download_fs_gp
 flatten_fs_gp <- function(json) {
+  if ('status' %in% names(json)) {
+    if (json$status == "Bad Request") {
+      warning('bad request, returning empty data.frame')
+      return(data.frame())
+    }
+  }
   dat <- json$data
   requestId <- sapply(dat, '[[', 'requestId')
   if (is.list(requestId)) {

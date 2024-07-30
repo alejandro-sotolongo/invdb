@@ -364,16 +364,18 @@ Database <- R6::R6Class(
       ids[is.na(ids)] <- fs$SEDOL[is.na(ids)]
       ids[is.na(ids)] <- fs$LEI[is.na(ids)]
       ids[is.na(ids)] <- fs$Identifier[is.na(ids)]
+      ids <- gsub(' ', '', ids)
       ids <- na.omit(ids)
-      if (length(ids) > 100) {
+      if (length(ids) > max_iter_by) {
         iter <- iter <- seq(1, length(ids), (max_iter_by-1))
-        iter[length(iter)] <- length(ids)
+        if (iter[length(iter)] < length(ids)) {
+          iter <- c(iter, length(ids))
+        }
         ret_list <- list()
       } else {
         mid <- round(length(ids) / 2, 0)
         iter <- seq(1, mid, length(ids))
       }
-      ids <- gsub(' ', '', ids)
       res <- list()
       res$ids <- ids
       res$iter <- iter
@@ -569,7 +571,9 @@ Database <- R6::R6Class(
         res <- list()
         if (length(ids) > 50) {
           iter <- seq(1, length(ids), 49)
-          iter[length(iter)] <- length(ids)
+          if (iter[length(iter)] < length(ids)) {
+            iter <- c(iter, length(ids))
+          }
         } else {
           iter <- c(1, length(ids))
         }
@@ -583,7 +587,6 @@ Database <- R6::R6Class(
         date_end <- Sys.Date() - 1
       }
       df <- data.frame()
-      res$ids <- na.omit(res$ids)
       for (i in 1:(length(res$iter)-1)) {
         json <- download_fs_gp(
           api_keys = self$api_keys,
@@ -603,7 +606,7 @@ Database <- R6::R6Class(
       wdf <- pivot_wider(df, id_cols = date, values_from = totalReturn,
                          names_from = DTCName)
       wxts <- df_to_xts(wdf)
-      combo <- rob_rbind(wxts, old_xts)
+      combo <- xts_rbind(wxts, old_xts)
       df_out <- xts_to_dataframe(combo)
       write_feather(df_out, self$bucket$path('returns/daily/factset.arrow'))
     },
