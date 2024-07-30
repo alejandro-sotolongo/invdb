@@ -170,8 +170,7 @@ Database <- R6::R6Class(
     # holdings ----
 
     update_holding = function(dtc_name, as_of = NULL, user_email = NULL,
-                              xl_df = NULL, overwrite = FALSE, 
-                              return_df = FALSE) {
+                              xl_df = NULL, return_df = FALSE) {
       if (is.null(as_of)) {
         as_of <- last_us_trading_day()
       }
@@ -206,7 +205,11 @@ Database <- R6::R6Class(
       if (hist_file) {
         if (df$returnInfo[1] %in% hist_df$returnInfo) {
           warning(paste0(dtc_name, ' already up to date.'))
-          return()
+          if (return_df) {
+            return(df)
+          } else {
+            return()
+          }
         } else {
           new_df <- rob_rbind(hist_df, df)
           write_parquet(new_df, self$bucket$path(s3_path))
@@ -220,10 +223,33 @@ Database <- R6::R6Class(
       }
     },
 
-    update_ctf = function() {
-      df <- self$update_holding('US Active Equity', return_df = TRUE)
+    # update_bd: boolean for updating all underling SMAs first
+    update_all_ctf_holdings = function(update_bd = FALSE) {
+      if (update_bd) {
+        bd <- subset_df(self$msl, 'HoldingsSource', 'BD')
+        for (i in 1:nrow(bd)) {
+          self$update_holding(bd$DTCName[i])
+        }
+      }
+      self$update_ctf('US Active Equity')
+      self$update_ctf('US Core Equity')
     },
-    
+
+    # update CTFs, need to account for SMA values in BD being updated at
+    # SMA level but not CTF level
+    update_ctf = function(dtc_name) {
+      df <- self$update_holding(dtc_name, return_df = TRUE)
+      mdf <- merge_msl(df, self$msl)
+      bd <- subset_df(mdf$match, 'HoldingsSource', 'BD')
+      for (i in 1:nrow(bd)) {
+        x <- read_holdings_file(self$bucket, bd$DTCName[i], TRUE)
+        mdf$all$emv[mdf$all$DTCName == bd$DTCName[i]] <- sum(x$emv)
+      }
+      s3_name <- paste0('holdings/', dtc_name, '.parquet')
+      write_parquet(mdf$all[, 1:9], self$bucket$path(s3_name)
+      )
+    },
+
     update_sec = function(obs, user_email) {
       df <- download_sec_nport(obs$LongCIK, obs$ShortCIK, user_email)
       return(df)
@@ -234,7 +260,7 @@ Database <- R6::R6Class(
       return(df)
     },
 
-    update_all_port = function(user_email = NULL, as_of = NULL, 
+    update_all_port = function(user_email = NULL, as_of = NULL,
                                update_csv = FALSE) {
       if (is.null(user_email)) user_email <- 'asotolongo@diversifiedtrust.com'
       ix <- self$msl$HoldingsSource == 'SEC'
@@ -245,7 +271,7 @@ Database <- R6::R6Class(
       } else {
         print('updating SEC')
         for (i in 1:nrow(sec)) {
-          print(paste0('updating ', sec$DTCName[i], ' ', i, ' out of ', 
+          print(paste0('updating ', sec$DTCName[i], ' ', i, ' out of ',
                        nrow(sec)))
           self$update_holding(sec$DTCName[i], as_of, user_email)
         }
@@ -258,7 +284,7 @@ Database <- R6::R6Class(
       } else {
         print('updating BD')
         for (i in 1:nrow(bd)) {
-          print(paste0('updating ', bd$DTCName[i], ' ', i, ' out of ', 
+          print(paste0('updating ', bd$DTCName[i], ' ', i, ' out of ',
                        nrow(bd)))
           self$update_holding(bd$DTCName[i], as_of, user_email)
         }
@@ -363,8 +389,8 @@ Database <- R6::R6Class(
       combo_ret_df <- xts_to_dataframe(combo_ret)
       write_parquet(combo_ret_df, self$bucket$path('returns/daily/tiingo.parquet'))
     },
-    
-    
+
+
     filter_fs_ids = function(max_iter_by = 100) {
       fs <- subset_df(self$msl, 'ReturnSource', 'factset')
       ids <- fs$ISIN
@@ -421,11 +447,11 @@ Database <- R6::R6Class(
       )
       write_feather(as_of_df, self$bucket$path('co-data/arrow/fina-as-of.arrow'))
     },
-    
+
     # Update Factset financial data for stock universe each quarter
     # yrs_back = how many years back to pull data
     # will save arrow and parquet files to S3
-    update_fs_fina_quarterly = function(yrs_back = 1, 
+    update_fs_fina_quarterly = function(yrs_back = 1,
       dtype = c('PE', 'PB', 'PFCF', 'DY', 'ROE', 'MCAP')) {
       # TO-DO read old file and and new row
       if (dtype == 'PE') {
@@ -433,7 +459,7 @@ Database <- R6::R6Class(
       } else if (dtype == 'PB') {
         formulas <- paste0('FG_PBK(QTR_R,-', yrs_back, 'AY,NOW,CQ')
       } else if (dtype == 'PFCF') {
-        formulas <- paste0('FG_CFLOW_FREE_EQ_PS(-', yrs_back, 'AY,NOW,CQ,USD)') 
+        formulas <- paste0('FG_CFLOW_FREE_EQ_PS(-', yrs_back, 'AY,NOW,CQ,USD)')
       } else if (dtype == 'DY') {
         formulas <- paste0('FG_DIV_YLD(-', yrs_back, 'AY,NOW,CQ)')
       } else if (dtype == 'ROE') {
@@ -454,7 +480,7 @@ Database <- R6::R6Class(
           ids = xids,
           formulas = formulas,
           type = 'cs'
-        ) 
+        )
         dat <- json$data
         res <- lapply(dat, '[[', 'result')
         dt <- sapply(res, '[[', 'dates')
@@ -473,7 +499,7 @@ Database <- R6::R6Class(
             date_match <- 1:length(dt)
             xval <- rep(NA, length(dt))
           }
-          val_mat[date_match, j] <- xval 
+          val_mat[date_match, j] <- xval
         }
         if (any(is.na(xids))) {
           miss_ids <- which(is.na(xids))
@@ -498,7 +524,7 @@ Database <- R6::R6Class(
       fund_df <- data.frame(Date = month_end(udt), fund_mat)
       colnames(fund_df)[-1] <- unlist(sapply(fund_list$val, colnames))
       write_feather(
-        fund_df, 
+        fund_df,
         self$bucket$path(paste0('co-data/arrow/', dtype, '.arrow'))
       )
       write_parquet(
@@ -506,10 +532,10 @@ Database <- R6::R6Class(
         self$bucket$path(paste0('co-data/parquet', dtype, '.parquet'))
       )
     },
-    
-    
+
+
     # updates factset returns every day in overnight routine
-    # days_back: how many weekdays days (includes U.S. holidays) to pull, 
+    # days_back: how many weekdays days (includes U.S. holidays) to pull,
     #  default is zero, meaning just yesterday's return
     # update_fs_ret_daily = function(days_back = 0) {
     #   old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
@@ -525,7 +551,7 @@ Database <- R6::R6Class(
     #       ids = xids,
     #       formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
     #       type = 'cs'
-    #     ) 
+    #     )
     #     dat <- json$data
     #     res <- lapply(dat, '[[', 'result')
     #     dt <- sapply(res, '[[', 'dates')
@@ -542,7 +568,7 @@ Database <- R6::R6Class(
     #         date_match <- 1:length(dt)
     #         xval <- rep(NA, length(dt))
     #       }
-    #       val_mat[date_match, j] <- xval 
+    #       val_mat[date_match, j] <- xval
     #     }
     #     if (any(is.na(xids))) {
     #       miss_ids <- which(is.na(xids))
@@ -567,9 +593,9 @@ Database <- R6::R6Class(
     #   write_parquet(ret_df, self$bucket$path('returns/daily/factset.parquet'))
     #   write_arrow(ret_df, self$bucket$path('returns/daily/factset.arrow'))
     # },
-    
-    
-    update_fs_ret_daily = function(ids = NULL, date_start = NULL, 
+
+
+    update_fs_ret_daily = function(ids = NULL, date_start = NULL,
                                    date_end = NULL) {
       old_ret <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
       old_xts <- df_to_xts(old_ret)
@@ -618,8 +644,8 @@ Database <- R6::R6Class(
       df_out <- xts_to_dataframe(combo)
       write_feather(df_out, self$bucket$path('returns/daily/factset.arrow'))
     },
-    
-    
+
+
     update_ctf_daily = function() {
       ix <- self$msl$ReturnSource == 'ctf_d'
       ix[is.na(ix)] <- FALSE
