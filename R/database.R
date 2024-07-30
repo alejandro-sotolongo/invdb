@@ -170,7 +170,8 @@ Database <- R6::R6Class(
     # holdings ----
 
     update_holding = function(dtc_name, as_of = NULL, user_email = NULL,
-                              xl_df = NULL, overwrite = FALSE) {
+                              xl_df = NULL, overwrite = FALSE, 
+                              return_df = FALSE) {
       if (is.null(as_of)) {
         as_of <- last_us_trading_day()
       }
@@ -214,8 +215,15 @@ Database <- R6::R6Class(
         warning(paste0(dtc_name, ' not found, creating new file'))
         write_parquet(df, self$bucket$path(s3_path))
       }
+      if (return_df) {
+        return(df)
+      }
     },
 
+    update_ctf = function() {
+      df <- self$update_holding('US Active Equity', return_df = TRUE)
+    },
+    
     update_sec = function(obs, user_email) {
       df <- download_sec_nport(obs$LongCIK, obs$ShortCIK, user_email)
       return(df)
