@@ -347,6 +347,15 @@ Database <- R6::R6Class(
 
     # returns ----
 
+    read_all_ret = function() {
+      d <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
+      d <- df_to_xts(d)
+      ret <- list()
+      ret$d <- d
+      ret$m <- xts()
+      self$ret <- ret
+    },
+    
     update_all_tiingo = function(start_date = NULL, end_date = NULL) {
       msl <- self$msl
       ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']

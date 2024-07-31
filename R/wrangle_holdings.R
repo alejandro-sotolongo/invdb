@@ -52,25 +52,25 @@ df_to_wgt <- function(df) {
 } 
 
 
+#' @title Match returns to holdings
 #' @param ret list of returns, ret$d = daily, ret$m = monthly
 #' @export
 match_ret_df <- function(mdf, ret) {
   # TO-DO: handle mix of monthly and daily returns
   freq <- unique(mdf$match$ReturnLib)
-  ret_col <- unique(mdf$match$ReturnCol)
+  ret_col <- unique(mdf$match$DTCName)
   if ('monthly' %in% freq) {
     month_bool <- TRUE
   } else {
     month_bool <- FALSE
     ix <- match(ret_col, colnames(ret$d), incomparables = NA)
     if (any(is.na(ix))) {
-      miss_col <- ret_col[is.na(ix)] %in% mdf$match$ReturnCol
+      miss_col <- is.na(ix)
       mdf$miss <- rob_rbind(mdf$miss, mdf$match[miss_col, ])
-      mdf$match <- mdf$match[-miss_col, ]
+      mdf$match <- mdf$match[!miss_col, ]
       if (all(is.na(ix))) {
         stop('no returns found')
       }
-      ix <- na.omit(ix)
     }
   }
   if (month_bool) {
@@ -86,6 +86,7 @@ match_ret_df <- function(mdf, ret) {
     ix <- na.omit(ix)
     asset_ret <- ret$m[, ix]
   } else {
+    ix <- na.omit(ix)
     asset_ret <- ret$d[, ix]
   }
   res <- list()
@@ -148,6 +149,7 @@ msl_match <- function(df, msl) {
 }
 
 
+#' @title Helper function to filter ids by multiple attempts to match
 #' @export
 .fill_ix <- function(a, b) {
   if (length(a) == length(b)) {
@@ -159,6 +161,11 @@ msl_match <- function(df, msl) {
 }
 
 
+#' @title Merge MSL and holdings data.frame (df)
+#' @param df holdings data.frame
+#' @param msl master security list
+#' @return list with all, match, and miss to represent union, intersection, and
+#'   union - intersection
 #' @export
 merge_msl <- function(df, msl) {
   ix <- msl_match(df, msl)
@@ -173,56 +180,90 @@ merge_msl <- function(df, msl) {
   return(res)
 }
 
-drill_down <- function(mdf, msl, bucket, latest = TRUE) {
-  
+
+#' @title Left join master security list
+#' @param mdf list returned from `merge_msl`, see details
+#' @param msl master security list
+#' @details This function is designed to rejoin data to the MSL where some of
+#'   the data has been joined and some has not, for example in when drilling
+#'   down in holdings the holdings will not have been joined but higher level
+#'   securities will have the joined data
+#' @return list with all, matched, and missing data
+#' @export
+left_merge_msl <- function(mdf, msl) {
+  ix <- msl_match(mdf$all, msl)
+  left_mdf <- mdf$all[, !colnames(mdf$all) %in% colnames(msl)]
+  union_df <- cbind(left_mdf, msl[ix, ])
+  inter_df <- union_df[!is.na(ix), ]
+  miss_df <- union_df[is.na(ix), ]
+  res <- list(
+    all = union_df,
+    match = inter_df,
+    miss = miss_df
+  )
+  return(res)
 }
 
 
-#' #' @export
-#' drill_down <- function(mdf, msl, bucket, latest = TRUE) {
-#'   check_mdf(mdf)
-#'   df <- mdf$match
-#'   res <- list(match = data.frame(), miss = data.frame())
-#'   for (i in 1:nrow(df)) {
-#'     if (df$Layer[i] > 1) {
-#'       df_i <- read_holdings_file(bucket, df$DTCName[i], latest)
-#'       df_i$ParrentAsset <- df$DTCName[i]
-#'       mdf_i <- merge_msl(df_i, msl)
-#'       mdf_i$match$pctVal <- mdf_i$match$pctVal * df$pctVal[i]
-#'       mdf_i$miss$pctVal <- mdf_i$miss$pctVal * df$pctVal[i]
-#'       res$match <- rob_rbind(res$match, mdf_i$match)
-#'       res$miss <- rob_rbind(res$miss, mdf_i$miss)
-#'     } else {
-#'       res$match <- rob_rbind(res$match, df[i, ])
-#'     }
-#'   }
-#'   return(res)
-#' }
-#' 
-#' 
-#' #' @export
-#' expand_all <- function(mdf, msl, bucket, latest = TRUE) {
-#'   max_layer <- 4
-#'   res <- drill_down(mdf, msl, bucket)
-#'   for (i_layer in 1:max_layer) {
-#'     if (max(res$match$Layer, na.rm = TRUE) == 1) {
-#'       break
-#'     }
-#'     ix <- res$match$Layer > 1
-#'     ix[is.na(ix)] <- FALSE
-#'     expand_df <- res$match[ix, ]
-#'     res$match <- res$match[!ix, ]
-#'     for (i_row in 1:nrow(expand_df)) {
-#'       df_i <- read_holdings_file(bucket, expand_df$DTCName[i_row], latest)
-#'       mdf_i <- merge_msl(df_i, msl)
-#'       mdf_i$match$pctVal <- expand_df$pctVal[i_row] * mdf_i$match$pctVal
-#'       mdf_i$miss$pctVal <- expand_df$pctVal[i_row] * mdf_i$miss$pctVal
-#'       res$match <- rob_rbind(res$match, mdf_i$match)
-#'       res$miss <- rob_rbind(res$miss, mdf_i$miss)
-#'     }
-#'   }
-#'   return(res)
-#' }
+#' @title Drilldown one layer
+#' @param mdf list from `merge_msl`
+#' @param bucket s3 bucket from Database object
+#' @param latest boolean for use latest assets only
+#' @param lay which layer to drill down
+#' @param recons_wgt boolean to force weights to sum to 1
+#' @export
+drill_down <- function(mdf, msl, bucket, latest = TRUE, lay = 2, 
+                       recons_wgt = TRUE) {
+  # if we only want the latest holdings, trim to last date
+  if (latest) {
+    mdf$all <- latest_holdings(mdf$all)
+    mdf$match <- latest_holdings(mdf$match)
+    mdf$miss <- latest_holdings(mdf$miss)
+  }
+  # seperate funds that need drill down and extract holdings
+  lay_x <- mdf$match$Layer >= lay
+  dat <- lapply(mdf$match$DTCName[lay_x], read_holdings_file, 
+                bucket = db$bucket, latest = latest)
+  dat <- lapply(dat, clean_emv)
+  # adjust market value and weights for each drill down fund
+  # also add parent company name to drill down holdings
+  val_vec <- mdf$match$emv[lay_x]
+  wgt_vec <- mdf$match$pctVal[lay_x]
+  par_vec <- mdf$match$DTCName[lay_x]
+  for (i in 1:length(dat)) {
+    if (recons_wgt) {
+      dat[[i]]$pctVal <- dat[[i]]$pctVal / sum(dat[[i]]$pctVal)
+    }
+    dat[[i]]$emv <- dat[[i]]$pctVal * val_vec[i]
+    dat[[i]]$pctVal <- dat[[i]]$pctVal * wgt_vec[i]
+    dat[[i]][, paste0('Layer', lay)] <- par_vec[i]
+  }
+  # to-do why doesn't do.call work here?
+  dd_holdings <- data.frame()
+  for (i in 1:length(dat)) {
+    dd_holdings <- rob_rbind(dd_holdings, dat[[i]])
+  }
+  # sub drill down holdings back in for the one high level line-item
+  mdf$match <- rob_rbind(mdf$match[!lay_x, ], dd_holdings)
+  mdf$all <- rob_rbind(mdf$match, mdf$miss)
+  mdf <- left_merge_msl(mdf, msl)
+  return(mdf)
+}
+
+
+#' @title Standardize EMV column header for $ value
+#' @export
+#' @details holdings files from SEC will have `valUSD` as column header or field
+#'   representing value, change to `emv` to standardize with Black Diamond pull
+clean_emv <- function(df) {
+  if ('emv' %in% colnames(df)) {
+    return(df)
+  }
+  if ('valUSD' %in% colnames(df)) {
+    df$emv <- as.numeric(df$valUSD)
+  }
+  return(df)
+}
 
 
 #' @export
@@ -302,17 +343,5 @@ latest_holdings <- function(df) {
   return(res)
 }
 
-
-#' @export
-port_expand_all <- function(dtc_name, bucket, msl, latest = TRUE) {
-  df <- read_holdings_file(bucket, dtc_name, latest)
-  mdf <- merge_msl(df, msl)
-  exp_df <- expand_all(mdf, msl, bucket, latest)
-  if (latest) {
-    exp_df$match <- latest_holdings(exp_df$match)
-    exp_df$miss <- latest_holdings(exp_df$miss)
-  }
-  return(exp_df)
-}
 
 
