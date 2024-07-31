@@ -231,13 +231,13 @@ Database <- R6::R6Class(
           self$update_holding(bd$DTCName[i])
         }
       }
-      self$update_ctf('US Active Equity')
-      self$update_ctf('US Core Equity')
+      self$update_ctf_holdings('US Active Equity')
+      self$update_ctf_holdings('US Core Equity')
     },
 
     # update CTFs, need to account for SMA values in BD being updated at
     # SMA level but not CTF level
-    update_ctf = function(dtc_name) {
+    update_ctf_holdings = function(dtc_name, add_to_existing = TRUE) {
       df <- self$update_holding(dtc_name, return_df = TRUE)
       mdf <- merge_msl(df, self$msl)
       bd <- subset_df(mdf$match, 'HoldingsSource', 'BD')
@@ -246,7 +246,12 @@ Database <- R6::R6Class(
         mdf$all$emv[mdf$all$DTCName == bd$DTCName[i]] <- sum(x$emv)
       }
       s3_name <- paste0('holdings/', dtc_name, '.parquet')
-      write_parquet(mdf$all[, 1:9], self$bucket$path(s3_name)
+      df <- mdf$all[, 1:9]
+      if (add_to_existing) {
+        old_df <- read_parquet(self$bucket$path(s3_name))
+        df <- rob_rbind(old_df, df)
+      }
+      write_parquet(df, self$bucket$path(s3_name)
       )
     },
 

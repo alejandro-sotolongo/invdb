@@ -173,52 +173,56 @@ merge_msl <- function(df, msl) {
   return(res)
 }
 
-
-#' @export
 drill_down <- function(mdf, msl, bucket, latest = TRUE) {
-  check_mdf(mdf)
-  df <- mdf$match
-  res <- list(match = data.frame(), miss = data.frame())
-  for (i in 1:nrow(df)) {
-    if (df$Layer[i] > 1) {
-      df_i <- read_holdings_file(bucket, df$DTCName[i], latest)
-      df_i$ParrentAsset <- df$DTCName[i]
-      mdf_i <- merge_msl(df_i, msl)
-      mdf_i$match$pctVal <- mdf_i$match$pctVal * df$pctVal[i]
-      mdf_i$miss$pctVal <- mdf_i$miss$pctVal * df$pctVal[i]
-      res$match <- rob_rbind(res$match, mdf_i$match)
-      res$miss <- rob_rbind(res$miss, mdf_i$miss)
-    } else {
-      res$match <- rob_rbind(res$match, df[i, ])
-    }
-  }
-  return(res)
+  
 }
 
 
-#' @export
-expand_all <- function(mdf, msl, bucket, latest = TRUE) {
-  max_layer <- 4
-  res <- drill_down(mdf, msl, bucket)
-  for (i_layer in 1:max_layer) {
-    if (max(res$match$Layer, na.rm = TRUE) == 1) {
-      break
-    }
-    ix <- res$match$Layer > 1
-    ix[is.na(ix)] <- FALSE
-    expand_df <- res$match[ix, ]
-    res$match <- res$match[!ix, ]
-    for (i_row in 1:nrow(expand_df)) {
-      df_i <- read_holdings_file(bucket, expand_df$DTCName[i_row], latest)
-      mdf_i <- merge_msl(df_i, msl)
-      mdf_i$match$pctVal <- expand_df$pctVal[i_row] * mdf_i$match$pctVal
-      mdf_i$miss$pctVal <- expand_df$pctVal[i_row] * mdf_i$miss$pctVal
-      res$match <- rob_rbind(res$match, mdf_i$match)
-      res$miss <- rob_rbind(res$miss, mdf_i$miss)
-    }
-  }
-  return(res)
-}
+#' #' @export
+#' drill_down <- function(mdf, msl, bucket, latest = TRUE) {
+#'   check_mdf(mdf)
+#'   df <- mdf$match
+#'   res <- list(match = data.frame(), miss = data.frame())
+#'   for (i in 1:nrow(df)) {
+#'     if (df$Layer[i] > 1) {
+#'       df_i <- read_holdings_file(bucket, df$DTCName[i], latest)
+#'       df_i$ParrentAsset <- df$DTCName[i]
+#'       mdf_i <- merge_msl(df_i, msl)
+#'       mdf_i$match$pctVal <- mdf_i$match$pctVal * df$pctVal[i]
+#'       mdf_i$miss$pctVal <- mdf_i$miss$pctVal * df$pctVal[i]
+#'       res$match <- rob_rbind(res$match, mdf_i$match)
+#'       res$miss <- rob_rbind(res$miss, mdf_i$miss)
+#'     } else {
+#'       res$match <- rob_rbind(res$match, df[i, ])
+#'     }
+#'   }
+#'   return(res)
+#' }
+#' 
+#' 
+#' #' @export
+#' expand_all <- function(mdf, msl, bucket, latest = TRUE) {
+#'   max_layer <- 4
+#'   res <- drill_down(mdf, msl, bucket)
+#'   for (i_layer in 1:max_layer) {
+#'     if (max(res$match$Layer, na.rm = TRUE) == 1) {
+#'       break
+#'     }
+#'     ix <- res$match$Layer > 1
+#'     ix[is.na(ix)] <- FALSE
+#'     expand_df <- res$match[ix, ]
+#'     res$match <- res$match[!ix, ]
+#'     for (i_row in 1:nrow(expand_df)) {
+#'       df_i <- read_holdings_file(bucket, expand_df$DTCName[i_row], latest)
+#'       mdf_i <- merge_msl(df_i, msl)
+#'       mdf_i$match$pctVal <- expand_df$pctVal[i_row] * mdf_i$match$pctVal
+#'       mdf_i$miss$pctVal <- expand_df$pctVal[i_row] * mdf_i$miss$pctVal
+#'       res$match <- rob_rbind(res$match, mdf_i$match)
+#'       res$miss <- rob_rbind(res$miss, mdf_i$miss)
+#'     }
+#'   }
+#'   return(res)
+#' }
 
 
 #' @export
