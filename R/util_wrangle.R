@@ -46,13 +46,3 @@ request_id_match_msl <- function(request_id, msl) {
   ix <- .fill_ix(ix, ix_id)
   return(ix)
 }
-
-
-#' @export
-df_to_xts <- function(df) {
-  ix <- is.na(df[[1]])
-  df <- df[!ix, ]
-  res <- xts(df[, -1], as.Date(df[[1]]))
-  colnames(res) <- colnames(df)[-1]
-  res
-}
