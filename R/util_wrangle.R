@@ -46,3 +46,17 @@ request_id_match_msl <- function(request_id, msl) {
   ix <- .fill_ix(ix, ix_id)
   return(ix)
 }
+
+#' @export
+get_iter <- function(ids, max_iter_by = 50) {
+  if (length(ids) > max_iter_by) {
+    iter <- iter <- seq(1, length(ids), (max_iter_by-1))
+    if (iter[length(iter)] < length(ids)) {
+      iter <- c(iter, length(ids))
+    }
+    ret_list <- list()
+  } else {
+    iter <- c(1, length(ids))
+  }
+  return(iter)
+}

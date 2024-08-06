@@ -387,6 +387,10 @@ download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
 }
 
 
+download_fs_fapi <- function(api_keys, ids, )
+
+
+
 #' @title Download Factset Global Prices
 #' @param api_keys list with factset api keys
 #' @param ids requested security identifiers, can by tickers, SEDOL, ISIN, 

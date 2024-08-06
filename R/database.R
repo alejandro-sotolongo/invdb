@@ -323,28 +323,6 @@ Database <- R6::R6Class(
       return(res)
     },
 
-    update_factset = function() {
-      ids <- na.omit(unique(self$msl$ISIN))
-      eps <- download_fs_large_ids(
-        self$api_keys,
-        ids,
-        "FF_EPS(QTR_R,0)"
-      )
-    },
-
-    update_etf = function() {
-      etf <- read_parquet(self$bucket$path('ETF/etf_dict.parquet'))
-      for (i in 1:nrow(etf)) {
-        df <- try(download_sec_nport(etf$FundCIK[i], etf$ParentCIK[i], 'als1012@gmail.com'))
-        if ('try-error' %in% class(df)) {
-          print('could not download')
-          next
-        }
-        write_parquet(df, self$bucket$path(paste0('ETF/nport/', etf$Name[i], '.parquet')))
-        print(paste0(etf$Name[i], ' ', i, ' out of ', nrow(etf)))
-      }
-    },
-
     # returns ----
 
     read_all_ret = function() {
@@ -356,57 +334,59 @@ Database <- R6::R6Class(
       self$ret <- ret
     },
     
-    update_all_tiingo = function(start_date = NULL, end_date = NULL) {
-      msl <- self$msl
-      ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
-      ticker_vec <- na.omit(ticker_vec)
-      ticker_vec <- unique(ticker_vec)
-      if (is.null(start_date)) {
-        start_date <- '1970-01-01'
-      }
-      price <- download_tiingo_tickers(ticker_vec, self$api_keys$t_api,
-                                       start_date, end_date)
-      price_xts <- xts(price[, -1], price[[1]])
-      ret <- price_to_ret(price_xts)
-      ret_df <- xts_to_dataframe(ret)
-      write_parquet(ret_df, self$bucket$path('return/tiingo.parquet'))
-    },
+    # update_all_tiingo = function(start_date = NULL, end_date = NULL) {
+    #   msl <- self$msl
+    #   ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
+    #   ticker_vec <- na.omit(ticker_vec)
+    #   ticker_vec <- unique(ticker_vec)
+    #   if (is.null(start_date)) {
+    #     start_date <- '1970-01-01'
+    #   }
+    #   price <- download_tiingo_tickers(ticker_vec, self$api_keys$t_api,
+    #                                    start_date, end_date)
+    #   price_xts <- xts(price[, -1], price[[1]])
+    #   ret <- price_to_ret(price_xts)
+    #   ret_df <- xts_to_dataframe(ret)
+    #   write_parquet(ret_df, self$bucket$path('return/tiingo.parquet'))
+    # },
 
-    update_tiingo_daily = function(date_start = NULL, date_end = NULL) {
-      msl <- self$msl
-      ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
-      ticker_vec <- na.omit(ticker_vec)
-      ticker_vec <- unique(ticker_vec)
-      hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
-      add_ticker <- ticker_vec[!ticker_vec %in% colnames(hist_ret)]
-      if (is.null(date_end)) {
-        date_end <- last_us_trading_day()
-      }
-      if (is.null(date_start)) {
-        td <- us_trading_days(date_end - 6, date_end)
-        date_start <- td[1]
-      }
-      price <- download_tiingo_tickers(ticker_vec, self$api_keys$t_api,
-                                       date_start = date_start,
-                                       date_end = date_end)
-      price_xts <- xts(price[, -1], price[[1]])
-      hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
-      hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
-      add_price <- download_tiingo_tickers(add_ticker, self$api_keys$t_api,
-                                           as.Date('1970-01-01'), date_end,
-                                           out_ret = TRUE, out_xts = TRUE)
-      if (!is.null(add_price)) {
-        hist_ret <- xts_cbind(hist_ret, add_price)
-      }
-      ret <- price_to_ret(price_xts)
-      combo_ret <- xts_rbind(hist_ret, ret)
-      combo_ret_df <- xts_to_dataframe(combo_ret)
-      write_parquet(combo_ret_df, self$bucket$path('returns/daily/tiingo.parquet'))
-    },
+    # update_tiingo_daily = function(date_start = NULL, date_end = NULL) {
+    #   msl <- self$msl
+    #   ticker_vec <- msl$ReturnCol[msl$ReturnSource == 'tiingo']
+    #   ticker_vec <- na.omit(ticker_vec)
+    #   ticker_vec <- unique(ticker_vec)
+    #   hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
+    #   add_ticker <- ticker_vec[!ticker_vec %in% colnames(hist_ret)]
+    #   if (is.null(date_end)) {
+    #     date_end <- last_us_trading_day()
+    #   }
+    #   if (is.null(date_start)) {
+    #     td <- us_trading_days(date_end - 6, date_end)
+    #     date_start <- td[1]
+    #   }
+    #   price <- download_tiingo_tickers(ticker_vec, self$api_keys$t_api,
+    #                                    date_start = date_start,
+    #                                    date_end = date_end)
+    #   price_xts <- xts(price[, -1], price[[1]])
+    #   hist_ret <- read_parquet(self$bucket$path('returns/daily/tiingo.parquet'))
+    #   hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
+    #   add_price <- download_tiingo_tickers(add_ticker, self$api_keys$t_api,
+    #                                        as.Date('1970-01-01'), date_end,
+    #                                        out_ret = TRUE, out_xts = TRUE)
+    #   if (!is.null(add_price)) {
+    #     hist_ret <- xts_cbind(hist_ret, add_price)
+    #   }
+    #   ret <- price_to_ret(price_xts)
+    #   combo_ret <- xts_rbind(hist_ret, ret)
+    #   combo_ret_df <- xts_to_dataframe(combo_ret)
+    #   write_parquet(combo_ret_df, self$bucket$path('returns/daily/tiingo.parquet'))
+    # },
 
 
-    filter_fs_ids = function(max_iter_by = 100) {
+    filter_fs_ids = function(max_iter_by = 50) {
       fs <- subset_df(self$msl, 'ReturnSource', 'factset')
+      fmf <- subset_df(fs, 'SecType', 'Mutual Fund')
+      fs <- fs[!fs$Ticker %in% fmf$Ticker, ]
       ids <- fs$ISIN
       ids[is.na(ids)] <- fs$CUSIP[is.na(ids)]
       ids[is.na(ids)] <- fs$SEDOL[is.na(ids)]
@@ -414,19 +394,14 @@ Database <- R6::R6Class(
       ids[is.na(ids)] <- fs$Identifier[is.na(ids)]
       ids <- gsub(' ', '', ids)
       ids <- na.omit(ids)
-      if (length(ids) > max_iter_by) {
-        iter <- iter <- seq(1, length(ids), (max_iter_by-1))
-        if (iter[length(iter)] < length(ids)) {
-          iter <- c(iter, length(ids))
-        }
-        ret_list <- list()
-      } else {
-        mid <- round(length(ids) / 2, 0)
-        iter <- seq(1, mid, length(ids))
-      }
+      iter <- get_iter(ids)
+      fi_ids <- fmf$Identifier
+      fi_iter <- get_iter(fi_ids)
       res <- list()
       res$ids <- ids
       res$iter <- iter
+      res$fi_ids <- fi_ids
+      res$fi_iter <- fi_iter
       return(res)
     },
 
@@ -548,65 +523,62 @@ Database <- R6::R6Class(
     },
 
 
-    # updates factset returns every day in overnight routine
-    # days_back: how many weekdays days (includes U.S. holidays) to pull,
-    #  default is zero, meaning just yesterday's return
-    # update_fs_ret_daily = function(days_back = 0) {
-    #   old_ret <- read_parquet(self$bucket$path('returns/daily/factset.parquet'))
-    #   old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
-    #   res <- self$filter_fs_ids()
-    #   iter <- res$iter
-    #   ids <- res$ids
-    #   ret_list <- list()
-    #   for (i in 1:(length(iter)-1)) {
-    #     xids <- ids[iter[i]:iter[i+1]]
-    #     json <- download_fs(
-    #       api_keys = self$api_keys,
-    #       ids = xids,
-    #       formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
-    #       type = 'cs'
-    #     )
-    #     dat <- json$data
-    #     res <- lapply(dat, '[[', 'result')
-    #     dt <- sapply(res, '[[', 'dates')
-    #     dt <- sort(unique(unlist(dt)))
-    #     val_mat <- matrix(nrow = length(dt), ncol = length(res))
-    #     for (j in 1:length(res)) {
-    #       if (all(c('dates', 'values') %in% names(res[[j]]))) {
-    #         xdt <- unlist(res[[j]]$dates)
-    #         date_match <- match(xdt, dt)
-    #         res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
-    #         xval <- unlist(res[[j]]$values)
-    #       } else {
-    #         warning(paste0(dat[[j]]$requestId, ' not properly structured'))
-    #         date_match <- 1:length(dt)
-    #         xval <- rep(NA, length(dt))
-    #       }
-    #       val_mat[date_match, j] <- xval
-    #     }
-    #     if (any(is.na(xids))) {
-    #       miss_ids <- which(is.na(xids))
-    #       colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
-    #     } else {
-    #       colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
-    #     }
-    #     ret_list$ret[[i]] <- val_mat
-    #     ret_list$dt[[i]] <- dt
-    #     print(iter[i])
-    #   }
-    #   ret <- do.call('cbind', ret_list$ret)
-    #   ret <- ret / 100
-    #   dt <- unique(unlist(ret_list$dt))
-    #   if (length(dt) != nrow(ret)) {
-    #     warning("dates and returns don't match, return list")
-    #     return(ret_list)
-    #   }
-    #   ret <- xts(ret, as.Date(dt))
-    #   ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
-    #   ret_df <- xts_to_dataframe(ret_update)
-    #   write_parquet(ret_df, self$bucket$path('returns/daily/factset.parquet'))
-    #   write_arrow(ret_df, self$bucket$path('returns/daily/factset.arrow'))
-    # },
+    # update formula api returns (mutual funds) daily
+    update_fi_ret_daily = function(days_back = 0) {
+      old_ret <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
+      old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
+      res <- self$filter_fs_ids()
+      iter <- res$fi_iter
+      ids <- res$fi_ids
+      ret_list <- list()
+      for (i in 1:(length(iter)-1)) {
+        xids <- ids[iter[i]:iter[i+1]]
+        json <- download_fs(
+          api_keys = self$api_keys,
+          ids = xids,
+          formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
+          type = 'cs'
+        )
+        dat <- json$data
+        res <- lapply(dat, '[[', 'result')
+        dt <- sapply(res, '[[', 'dates')
+        dt <- sort(unique(unlist(dt)))
+        val_mat <- matrix(nrow = length(dt), ncol = length(res))
+        for (j in 1:length(res)) {
+          if (all(c('dates', 'values') %in% names(res[[j]]))) {
+            xdt <- unlist(res[[j]]$dates)
+            date_match <- match(xdt, dt)
+            res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
+            xval <- unlist(res[[j]]$values)
+          } else {
+            warning(paste0(dat[[j]]$requestId, ' not properly structured'))
+            date_match <- 1:length(dt)
+            xval <- rep(NA, length(dt))
+          }
+          val_mat[date_match, j] <- xval
+        }
+        if (any(is.na(xids))) {
+          miss_ids <- which(is.na(xids))
+          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
+        } else {
+          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
+        }
+        ret_list$ret[[i]] <- val_mat
+        ret_list$dt[[i]] <- dt
+        print(iter[i])
+      }
+      ret <- do.call('cbind', ret_list$ret)
+      ret <- ret / 100
+      dt <- unique(unlist(ret_list$dt))
+      if (length(dt) != nrow(ret)) {
+        warning("dates and returns don't match, return list")
+        return(ret_list)
+      }
+      ret <- xts(ret, as.Date(dt))
+      ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
+      ret_df <- xts_to_dataframe(ret_update)
+      write_arrow(ret_df, self$bucket$path('returns/daily/mutual-fund.arrow'))
+    },
 
 
     update_fs_ret_daily = function(ids = NULL, date_start = NULL,
