@@ -361,7 +361,8 @@ download_fs_ctf_ret <- function(id, api_keys, t_minus = "-5") {
 #'   c("P_PRICE(0, -2, D)", "FF_EPS(QTR_R, 0)"). Features are a description to
 #'   match results of formulas, in this example c("Price", "EPS").
 #' @export
-download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
+download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs'),
+                        flatn = TRUE) {
   if (type[1] == 'ts') {
     struc <- 'time-series'
   } else {
@@ -378,17 +379,15 @@ download_fs <- function(api_keys, ids, formulas, type = c('ts', 'cs')) {
     "&formulas=",
     paste0(formulas, collapse = ",")
   )
+  if (flatn) {
+    request <- paste0(request, '&flatten=Y')
+  }
   response <- httr::GET(request, authenticate(username, password))
   print(response$status)
   output <- rawToChar(response$content)
-  #json <- fromJSON(output)[["data"]]
   json <- parse_json(output)
   return(json)
 }
-
-
-download_fs_fapi <- function(api_keys, ids, )
-
 
 
 #' @title Download Factset Global Prices

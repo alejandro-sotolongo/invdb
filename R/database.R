@@ -1,3 +1,11 @@
+#' @title Database
+#' @field msl table: master security list
+#' @field geo table: country number and geography
+#' @field api_keys optional list containing api_keys
+#' @field bucket `S3FileSystem` object from `arrow`
+#' @field macro list with tables for R3000 and ACWI model from Piper Sandler
+#' @field ret list with daily and monthly return tables 
+#' @field api_file optional .RData file to load list of api_keys
 #' @export
 Database <- R6::R6Class(
   'Database',
@@ -9,6 +17,17 @@ Database <- R6::R6Class(
     macro = NULL,
     ret = NULL,
 
+    #' @description Create a Database
+    #' @param msl table: master security list
+    #' @param geo table: country number and geography
+    #' @param bucket `S3FileSystem` object from `arrow`
+    #' @param api_keys list of api_keys
+    #' @param api_file `.RData` file to load api_key list
+    #' @details
+        #' All fields are optional, except the api_keys must be either entered
+        #' as a list `api_keys` or a file path to load the api_keys `api_file`.
+        #' The tables are `data.frames` or `tibbles` stored as arrow or parquet
+        #' files in S3, accessed through the `bucket` or `S3FileSystem`.
     initialize = function(
       msl = NULL,
       geo = NULL,
@@ -328,6 +347,14 @@ Database <- R6::R6Class(
     read_all_ret = function() {
       d <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
       d <- df_to_xts(d)
+      mf <- read_feather(self$bucket$path('returns/daily/mutual-fund.arrow'))
+      mf <- df_to_xts(mf)
+      ovlp <- colnames(mf) %in% colnames(d)
+      if (any(ovlp)) {
+        warning(paste0(colnames(mf)[ovlp]), ' found in daily returns')
+        mf <- mf[, !ovlp]
+      }
+      d <- xts_cbind(d, mf)
       ret <- list()
       ret$d <- d
       ret$m <- xts()
@@ -524,60 +551,42 @@ Database <- R6::R6Class(
 
 
     # update formula api returns (mutual funds) daily
-    update_fi_ret_daily = function(days_back = 0) {
-      old_ret <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
-      old_ret <- xts(old_ret[, -1], as.Date(old_ret[[1]]))
+    update_fs_mf_ret_daily = function(days_back = 0) {
+      old_ret <- read_feather(self$bucket$path('returns/daily/mutual-fund.arrow'))
+      old_ret <- df_to_xts(old_ret)
       res <- self$filter_fs_ids()
       iter <- res$fi_iter
       ids <- res$fi_ids
-      ret_list <- list()
+      ret_df <- data.frame()
+      formulas <- paste0('P_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)')
       for (i in 1:(length(iter)-1)) {
         xids <- ids[iter[i]:iter[i+1]]
         json <- download_fs(
           api_keys = self$api_keys,
           ids = xids,
-          formulas = paste0('FG_TOTAL_RETURNC(-', days_back, 'D,NOW,D,USD)'),
-          type = 'cs'
+          formulas = formulas,
+          type = 'ts'
         )
         dat <- json$data
-        res <- lapply(dat, '[[', 'result')
-        dt <- sapply(res, '[[', 'dates')
-        dt <- sort(unique(unlist(dt)))
-        val_mat <- matrix(nrow = length(dt), ncol = length(res))
-        for (j in 1:length(res)) {
-          if (all(c('dates', 'values') %in% names(res[[j]]))) {
-            xdt <- unlist(res[[j]]$dates)
-            date_match <- match(xdt, dt)
-            res[[j]]$values[sapply(res[[j]]$values, is.null)] <- NA
-            xval <- unlist(res[[j]]$values)
-          } else {
-            warning(paste0(dat[[j]]$requestId, ' not properly structured'))
-            date_match <- 1:length(dt)
-            xval <- rep(NA, length(dt))
-          }
-          val_mat[date_match, j] <- xval
-        }
-        if (any(is.na(xids))) {
-          miss_ids <- which(is.na(xids))
-          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]][-miss_ids]
-        } else {
-          colnames(val_mat) <- self$msl$DTCName[iter[i]:iter[i+1]]
-        }
-        ret_list$ret[[i]] <- val_mat
-        ret_list$dt[[i]] <- dt
-        print(iter[i])
+        res <- lapply(dat, '[[', formulas)
+        res <- list_replace_null(res)
+        res <- unlist(res)
+        dt <- sapply(dat, '[[', 'date')
+        req_id <- sapply(dat, '[[', 'requestId')
+        i_df <- data.frame(requestId = req_id, date = dt, value = res)
+        ret_df <- rob_rbind(ret_df, i_df)
       }
-      ret <- do.call('cbind', ret_list$ret)
-      ret <- ret / 100
-      dt <- unique(unlist(ret_list$dt))
-      if (length(dt) != nrow(ret)) {
-        warning("dates and returns don't match, return list")
-        return(ret_list)
-      }
-      ret <- xts(ret, as.Date(dt))
-      ret_update <- xts_rbind(old_ret, ret, overwrite = TRUE)
-      ret_df <- xts_to_dataframe(ret_update)
-      write_arrow(ret_df, self$bucket$path('returns/daily/mutual-fund.arrow'))
+      ret_df$value <- ret_df$value / 100
+      ix <- request_id_match_msl(ret_df$requestId, self$msl)
+      ret_df$DTCName <- self$msl$DTCName[ix]
+      is_dup <- duplicated(paste0(ret_df$DTCName, ret_df$date))
+      ret_df <- ret_df[!is_dup, ]
+      wdf <- pivot_wider(ret_df, id_cols = date, values_from = value, 
+                         names_from = DTCName)
+      wdf <- df_to_xts(wdf)
+      combo <- xts_rbind(old_ret, wdf)
+      combo <- xts_to_dataframe(combo)
+      write_feather(combo, self$bucket$path('returns/daily/mutual-fund.arrow'))
     },
 
 

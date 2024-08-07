@@ -4,7 +4,7 @@
 \alias{download_fs}
 \title{Factset Formula API}
 \usage{
-download_fs(api_keys, ids, formulas, type = c("ts", "cs"))
+download_fs(api_keys, ids, formulas, type = c("ts", "cs"), flatn = TRUE)
 }
 \arguments{
 \item{api_keys}{list with API keys}
