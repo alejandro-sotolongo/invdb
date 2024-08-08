@@ -1,20 +1,30 @@
-#' @title Database
-#' @field msl table: master security list
-#' @field geo table: country number and geography
-#' @field api_keys optional list containing api_keys
-#' @field bucket `S3FileSystem` object from `arrow`
-#' @field macro list with tables for R3000 and ACWI model from Piper Sandler
-#' @field ret list with daily and monthly return tables 
-#' @field api_file optional .RData file to load list of api_keys
+#' Database Object
+#' 
+#' @description
+#' Database connects to various data providers, e.g., FactSet, Black Diamond,
+#'   SEC EDGAR, etc, to pull data and organize in tables files (arrow, parquet)
+#'   in AWS S3.
 #' @export
 Database <- R6::R6Class(
   'Database',
   public = list(
+    
+    #' @field msl table: master security list
     msl = NULL,
+    
+    #' @field geo table: country number and geography
     geo = NULL,
+
+    #' @field api_keys optional list containing api_keys
     api_keys = NULL,
+    
+    #' @field bucket `S3FileSystem` object from `arrow`
     bucket = NULL,
+    
+    #' @field macro list with tables for R3000 and ACWI model from Piper Sandler
     macro = NULL,
+    
+    #' @field ret list with daily and monthly return tables 
     ret = NULL,
 
     #' @description Create a Database
@@ -24,10 +34,11 @@ Database <- R6::R6Class(
     #' @param api_keys list of api_keys
     #' @param api_file `.RData` file to load api_key list
     #' @details
-        #' All fields are optional, except the api_keys must be either entered
-        #' as a list `api_keys` or a file path to load the api_keys `api_file`.
-        #' The tables are `data.frames` or `tibbles` stored as arrow or parquet
-        #' files in S3, accessed through the `bucket` or `S3FileSystem`.
+        #' All fields are optional, except the api keys must be either entered
+        #' as a list through the api_keys parameter or a file path to load the 
+        #' api keys via api_file. The tables are data.frames or tibbles stored 
+        #' as arrow or parquet files in S3, accessed through the bucket 
+        #' S3FileSystem.
     initialize = function(
       msl = NULL,
       geo = NULL,
@@ -67,6 +78,13 @@ Database <- R6::R6Class(
 
     # tables -----
 
+    #' @description save master security list in S3
+    #' @param msl master security list
+    #' @details
+        #' If msl is left as NULL the msl stored in the Database Object as will
+        #' be written. If a data.frame or tibble is entered then that will
+        #' table will be saved to S3. Note there is only one msl, whatever is 
+        #' saved will overwrite the table in S3.
     write_msl = function(msl = NULL) {
       if (is.null(msl)) {
         msl <- self$msl
@@ -81,20 +99,31 @@ Database <- R6::R6Class(
       write_parquet(msl, self$bucket$path('tables/msl.parquet'))
     },
 
+    #' @description Read msl from S3
     read_msl = function() {
       self$check_bucket()
       self$msl <- read_parquet(self$bucket$path('tables/msl.parquet'))
     },
 
-    read_msl_xl = function() {
+    #' @description Read msl from Excel
+    #' @param path file path where workbook is stored
+    read_msl_xl = function(
+      path = 'N:/Investment Team/DATABASES/MDB/Tables/msl.xlsx') {
       self$msl <- readxl::read_excel(
-        path = 'N:/Investment Team/DATABASES/MDB/Tables/msl.xlsx',
+        path = path,
         sheet = 'msl',
         col_types = c('text', 'text', 'numeric', 'numeric',
                       rep('text', 13), 'numeric')
       )
     },
 
+    #' @description Write geography table
+    #' @param geo geography table
+    #' @details
+    #' If geo is left as NULL the geo stored in the Database Object as will
+    #' be written. If a data.frame or tibble is entered then that will
+    #' table will be saved to S3. Note there is only one geography table, 
+    #' whatever is saved will overwrite the table in S3.
     write_geo = function(geo = NULL) {
       if (is.null(geo)) {
         geo <- self$geo
@@ -109,18 +138,23 @@ Database <- R6::R6Class(
       write_parquet(geo, self$bucket$path('tables/geo.parquet'))
     },
 
+    #' @description Read geography table from S3
     read_geo = function() {
       self$check_bucket()
       self$geo <- read_parquet(self$bucket$path('tables/geo.parquet'))
     },
 
-    read_geo_xl = function() {
+    #' @description Read geography table from Excel
+    #' @param path file path where workbook is stored
+    read_geo_xl = function(
+      path = 'N:/Investment Team/DATABASES/MDB/Tables/geo.xlsx') {
       self$geo <- readxl::read_excel(
-        path = 'N:/Investment Team/DATABASES/MDB/Tables/geo.xlsx',
+        path = path,
         col_types = c('numeric', rep('text', 4))
       )
     },
 
+    #' @description Read macro workbooks from S3
     read_macro = function() {
       self$check_bucket()
       r3 <- read_parquet(self$bucket$path('macro/macro_r3.parquet'))
@@ -130,12 +164,16 @@ Database <- R6::R6Class(
 
     # checks ----
 
+    #' @description Check if bucket is not NULL
     check_bucket = function() {
       if (is.null(self$bucket)) {
         stop('bucket is missing')
       }
     },
 
+    #' @description
+        #' Check if MSL is loaded and has unique DTCNames (key id).
+        #'   Will try from S3 if NULL.
     check_msl = function() {
       if (is.null(self$msl)) {
         x <- try(self$read_msl())
@@ -159,6 +197,9 @@ Database <- R6::R6Class(
       }
     },
 
+    #' @description
+        #' Check if geography table is not NULL. Will try and read from S3 first.
+        #' Will also check if it's a data.frame.
     check_geo = function() {
       if (is.null(self$geo)) {
         x <- try(self$read_geo())
@@ -176,6 +217,9 @@ Database <- R6::R6Class(
       }
     },
 
+    #' @description
+        #' Check if api_keys are properly structured as named list. Will need
+        #' to update if more keys are added.
     check_api_keys = function() {
       if (is.null(self$api_keys)) {
         stop('api keys are missing')
@@ -188,6 +232,22 @@ Database <- R6::R6Class(
 
     # holdings ----
 
+    #' @description
+        #' Pull holdings of portfolio, current sources include Black Diamon,
+        #' SEC EDGAR, and Excel.
+    #' @param dtc_name key id, DTCName column in master security list
+    #' @param as_of optional date for when the holdings are pulled as of, see
+    #'   details
+    #' @param user_email default is Alejandro's, SEC requires email in API
+    #' @param xl_df if updating from Excel, data.frame to pass through
+    #' @param return_df data will be saved in S3, if set to TRUE a data.frame
+    #'   will also be returned
+    #' @details The portfolio (or mutual fund, CTF, SMA, ETF, etc) will need to
+    #'   be in the MSL. For existing files, new rows will
+    #'   be  added for holdings as of the new date. For SEC sources the most
+    #'   recent filings will be pulled. For Black Diamond the date is part of
+    #'   the API to pull holdings as of a specific date. If left NULL date will
+    #'   default to the last trading day.
     update_holding = function(dtc_name, as_of = NULL, user_email = NULL,
                               xl_df = NULL, return_df = FALSE) {
       if (is.null(as_of)) {
@@ -242,7 +302,15 @@ Database <- R6::R6Class(
       }
     },
 
-    # update_bd: boolean for updating all underling SMAs first
+    #' @description
+        #' Update CTF holdings from Black Diamond
+    #' @param update_bd boolean to update underlying holdings first.
+    #' @details
+        #' The SMA holdings in CTF accounts are updated bi-monthly. As a 
+        #' work around the SMAs are read as their own accounts seperately to
+        #' get a more recent estimate. If update_bd is set to FALSE the latest
+        #' values will be used (last time they were updated). Set to TRUE to
+        #' force and update of the underlying SMAs to the last trading day.
     update_all_ctf_holdings = function(update_bd = FALSE) {
       if (update_bd) {
         bd <- subset_df(self$msl, 'HoldingsSource', 'BD')
@@ -254,8 +322,14 @@ Database <- R6::R6Class(
       self$update_ctf_holdings('US Core Equity')
     },
 
-    # update CTFs, need to account for SMA values in BD being updated at
-    # SMA level but not CTF level
+    #' @description Update CTF holdings
+    #' @param dtc_name DTCName in msl (key id)
+    #' @param add_to_existing boolean to add new holdings to old holdings as
+    #' a time-series of holdings. If set to FALSE the file with old holdings 
+    #' will be overwritten and only new holdings will exist.
+    #' @details CAREFUL with add_to_existing. Set to TRUE to continue time-series
+    #' of holdings. If you need to overwrite file with just new holdings, set
+    #' to FALSE.
     update_ctf_holdings = function(dtc_name, add_to_existing = TRUE) {
       df <- self$update_holding(dtc_name, return_df = TRUE)
       mdf <- merge_msl(df, self$msl)
@@ -274,18 +348,39 @@ Database <- R6::R6Class(
       )
     },
 
+    #' @description Helper function to update holdings from SEC EDGAR filings
+    #' @param obs row of msl with portfolio meta data
+    #' @param user_email SEC requires an email address when scraping data
+    #' @return data.frame of holdings, does not save to S3
     update_sec = function(obs, user_email) {
       df <- download_sec_nport(obs$LongCIK, obs$ShortCIK, user_email)
       return(df)
     },
 
+    #' @description Helper function to update holdings from Black Diamond
+    #' @param obs row of msl with portfolio meta data
+    #' @param api_keys description
+    #' @param as_of desired date of when to pull holdings from
+    #' @return data.frame of holdings, does not save to S3
+    #' @details
+        #' IMPORTANT: needs to be run locally, api keys for black diamond are
+        #' only stored in DTC servers, not AWS.
     update_bd = function(obs, api_keys, as_of) {
       df <- download_bd(obs$BDAccountID, api_keys, as_of)
       return(df)
     },
 
-    update_all_port = function(user_email = NULL, as_of = NULL,
-                               update_csv = FALSE) {
+    #' @description Update all portfolios holdings (except CTFs, see 
+    #'   update_ctf_holdings) from Black Diamond and SEC
+    #' @param user_email will default to Alejandro's if left NULL, SEC requires
+    #' @param as_of for Black Diamond date for when to pull as of, will 
+    #'   default to last trading day if letf NULL
+    #' @return saves updated holdings in S3
+    #' @details
+        #' The portfolios to be updated are filtered from the MSL that have
+        #' holdings sources of BD or SEC. CTFs are updated with a seperate
+        #' process to work around the bi-monthly SMA update within the CTF.
+    update_all_port = function(user_email = NULL, as_of = NULL) {
       if (is.null(user_email)) user_email <- 'asotolongo@diversifiedtrust.com'
       ix <- self$msl$HoldingsSource == 'SEC'
       ix[is.na(ix)] <- FALSE
@@ -315,6 +410,12 @@ Database <- R6::R6Class(
       }
     },
 
+    #' @description
+        #' Subset holdings data.frame for only the most recent holdings
+    #' @details
+        #' Holdings data.frames will have a time-series containing the history
+        #' of holdings, this function will return all of the holdings on the 
+        #' most recent date stored in the data.frame.
     get_curr_holdings = function() {
       ix <- self$msl$Layer == 2
       ix[is.na(ix)] <- FALSE
@@ -344,6 +445,9 @@ Database <- R6::R6Class(
 
     # returns ----
 
+    #' @description Read in all retuns to populate ret field
+    #' @return db$ret will now be populated with a list containing two xts
+    #'   objects: $d daily returns and $m monthly returns
     read_all_ret = function() {
       d <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
       d <- df_to_xts(d)
@@ -410,6 +514,16 @@ Database <- R6::R6Class(
     # },
 
 
+    #' @description Get factset request ids from the msl
+    #' @param max_iter_by number to sequence large number of ids
+    #' @details
+    #'   Large amounts of ids need to broken up, some factset API requests only
+    #'   allow 50 ids at a time. Request ids first look for ISIN, then CUSIP, 
+    #'   SEDOL, LEI, and Identifier in order. The function returns a list with
+    #'   ids and iter for global prices and fi_ids and fi_iter for the formula 
+    #'   API (mutual fund returns). The iter is the sequence of large amounts
+    #'   of ids to be broken up into smaller pieces. For small numbers, e.g., 
+    #'   10 ids will contain and iter of c(1, 10).
     filter_fs_ids = function(max_iter_by = 50) {
       fs <- subset_df(self$msl, 'ReturnSource', 'factset')
       fmf <- subset_df(fs, 'SecType', 'Mutual Fund')
@@ -432,9 +546,13 @@ Database <- R6::R6Class(
       return(res)
     },
 
-    # run after each quarter update of financial data from factset,
-    # takes latest data point of time-series of financial data for each
-    # company and put's into one data.frame
+    #' @description
+        #' Run after each quarter to add most recent fundamental data point 
+        #' (e.g., P/E, ROE) to S3 table.
+    #' @details
+        #' Currently set up for P/E, P/B, P/FCF, DY, ROE, and Mkt Cap. The data
+        #' are organized by the metric. The P/E table will contain a time-series
+        #' of the P/E for each stock. 
     update_fs_fina_most_recent = function() {
       dat <- list()
       dat$pe <- read_feather(self$bucket$path('co-data/arrow/PE.arrow'))

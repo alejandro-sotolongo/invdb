@@ -2,13 +2,11 @@
 % Please edit documentation in R/database.R
 \name{Database}
 \alias{Database}
-\title{Database}
+\title{Database Object}
 \description{
-Database
-
-Database
-
-Intitialize
+Database connects to various data providers, e.g., FactSet, Black Diamond,
+  SEC EDGAR, etc, to pull data and organize in tables files (arrow, parquet)
+  in AWS S3.
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
@@ -24,15 +22,6 @@ Intitialize
 \item{\code{macro}}{list with tables for R3000 and ACWI model from Piper Sandler}
 
 \item{\code{ret}}{list with daily and monthly return tables}
-
-\item{\code{api_file}}{optional .RData file to load list of api_keys}
-}
-\if{html}{\out{</div>}}
-}
-\section{Active bindings}{
-\if{html}{\out{<div class="r6-active-bindings">}}
-\describe{
-\item{\code{api_file}}{optional .RData file to load list of api_keys}
 }
 \if{html}{\out{</div>}}
 }
@@ -104,10 +93,11 @@ Create a Database
 \if{html}{\out{</div>}}
 }
 \subsection{Details}{
-All fields are optional, except the api_keys must be either entered
-as a list `api_keys` or a file path to load the api_keys `api_file`.
-The tables are `data.frames` or `tibbles` stored as arrow or parquet
-files in S3, accessed through the `bucket` or `S3FileSystem`.
+All fields are optional, except the api keys must be either entered
+as a list through the api_keys parameter or a file path to load the 
+api keys via api_file. The tables are data.frames or tibbles stored 
+as arrow or parquet files in S3, accessed through the bucket 
+S3FileSystem.
 }
 
 }
@@ -115,8 +105,23 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-write_msl"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-write_msl}{}}}
 \subsection{Method \code{write_msl()}}{
+save master security list in S3
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$write_msl(msl = NULL)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{msl}}{master security list}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+If msl is left as NULL the msl stored in the Database Object as will
+be written. If a data.frame or tibble is entered then that will
+table will be saved to S3. Note there is only one msl, whatever is 
+saved will overwrite the table in S3.
 }
 
 }
@@ -124,6 +129,7 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-read_msl"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-read_msl}{}}}
 \subsection{Method \code{read_msl()}}{
+Read msl from S3
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$read_msl()}\if{html}{\out{</div>}}
 }
@@ -133,17 +139,40 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-read_msl_xl"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-read_msl_xl}{}}}
 \subsection{Method \code{read_msl_xl()}}{
+Read msl from Excel
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Database$read_msl_xl()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Database$read_msl_xl(path = "N:/Investment Team/DATABASES/MDB/Tables/msl.xlsx")}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{path}}{file path where workbook is stored}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-write_geo"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-write_geo}{}}}
 \subsection{Method \code{write_geo()}}{
+Write geography table
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$write_geo(geo = NULL)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{geo}}{geography table}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+If geo is left as NULL the geo stored in the Database Object as will
+be written. If a data.frame or tibble is entered then that will
+table will be saved to S3. Note there is only one geography table, 
+whatever is saved will overwrite the table in S3.
 }
 
 }
@@ -151,6 +180,7 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-read_geo"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-read_geo}{}}}
 \subsection{Method \code{read_geo()}}{
+Read geography table from S3
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$read_geo()}\if{html}{\out{</div>}}
 }
@@ -160,15 +190,24 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-read_geo_xl"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-read_geo_xl}{}}}
 \subsection{Method \code{read_geo_xl()}}{
+Read geography table from Excel
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Database$read_geo_xl()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Database$read_geo_xl(path = "N:/Investment Team/DATABASES/MDB/Tables/geo.xlsx")}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{path}}{file path where workbook is stored}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-read_macro"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-read_macro}{}}}
 \subsection{Method \code{read_macro()}}{
+Read macro workbooks from S3
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$read_macro()}\if{html}{\out{</div>}}
 }
@@ -178,6 +217,7 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-check_bucket"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-check_bucket}{}}}
 \subsection{Method \code{check_bucket()}}{
+Check if bucket is not NULL
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$check_bucket()}\if{html}{\out{</div>}}
 }
@@ -187,6 +227,8 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-check_msl"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-check_msl}{}}}
 \subsection{Method \code{check_msl()}}{
+Check if MSL is loaded and has unique DTCNames (key id).
+  Will try from S3 if NULL.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$check_msl()}\if{html}{\out{</div>}}
 }
@@ -196,6 +238,8 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-check_geo"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-check_geo}{}}}
 \subsection{Method \code{check_geo()}}{
+Check if geography table is not NULL. Will try and read from S3 first.
+Will also check if it's a data.frame.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$check_geo()}\if{html}{\out{</div>}}
 }
@@ -205,6 +249,8 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-check_api_keys"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-check_api_keys}{}}}
 \subsection{Method \code{check_api_keys()}}{
+Check if api_keys are properly structured as named list. Will need
+to update if more keys are added.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$check_api_keys()}\if{html}{\out{</div>}}
 }
@@ -214,6 +260,8 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-update_holding"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_holding}{}}}
 \subsection{Method \code{update_holding()}}{
+Pull holdings of portfolio, current sources include Black Diamon,
+SEC EDGAR, and Excel.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_holding(
   dtc_name,
@@ -224,13 +272,55 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 )}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{dtc_name}}{key id, DTCName column in master security list}
+
+\item{\code{as_of}}{optional date for when the holdings are pulled as of, see
+details}
+
+\item{\code{user_email}}{default is Alejandro's, SEC requires email in API}
+
+\item{\code{xl_df}}{if updating from Excel, data.frame to pass through}
+
+\item{\code{return_df}}{data will be saved in S3, if set to TRUE a data.frame
+will also be returned}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+The portfolio (or mutual fund, CTF, SMA, ETF, etc) will need to
+  be in the MSL. For existing files, new rows will
+  be  added for holdings as of the new date. For SEC sources the most
+  recent filings will be pulled. For Black Diamond the date is part of
+  the API to pull holdings as of a specific date. If left NULL date will
+  default to the last trading day.
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-update_all_ctf_holdings"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_all_ctf_holdings}{}}}
 \subsection{Method \code{update_all_ctf_holdings()}}{
+Update CTF holdings from Black Diamond
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_all_ctf_holdings(update_bd = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{update_bd}}{boolean to update underlying holdings first.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+The SMA holdings in CTF accounts are updated bi-monthly. As a 
+work around the SMAs are read as their own accounts seperately to
+get a more recent estimate. If update_bd is set to FALSE the latest
+values will be used (last time they were updated). Set to TRUE to
+force and update of the underlying SMAs to the last trading day.
 }
 
 }
@@ -238,8 +328,26 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-update_ctf_holdings"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_ctf_holdings}{}}}
 \subsection{Method \code{update_ctf_holdings()}}{
+Update CTF holdings
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_ctf_holdings(dtc_name, add_to_existing = TRUE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{dtc_name}}{DTCName in msl (key id)}
+
+\item{\code{add_to_existing}}{boolean to add new holdings to old holdings as
+a time-series of holdings. If set to FALSE the file with old holdings 
+will be overwritten and only new holdings will exist.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+CAREFUL with add_to_existing. Set to TRUE to continue time-series
+of holdings. If you need to overwrite file with just new holdings, set
+to FALSE.
 }
 
 }
@@ -247,35 +355,96 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-update_sec"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_sec}{}}}
 \subsection{Method \code{update_sec()}}{
+Helper function to update holdings from SEC EDGAR filings
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_sec(obs, user_email)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{obs}}{row of msl with portfolio meta data}
+
+\item{\code{user_email}}{SEC requires an email address when scraping data}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+data.frame of holdings, does not save to S3
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-update_bd"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_bd}{}}}
 \subsection{Method \code{update_bd()}}{
+Helper function to update holdings from Black Diamond
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_bd(obs, api_keys, as_of)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{obs}}{row of msl with portfolio meta data}
+
+\item{\code{api_keys}}{description}
+
+\item{\code{as_of}}{desired date of when to pull holdings from}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+IMPORTANT: needs to be run locally, api keys for black diamond are
+only stored in DTC servers, not AWS.
+}
+
+\subsection{Returns}{
+data.frame of holdings, does not save to S3
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-update_all_port"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_all_port}{}}}
 \subsection{Method \code{update_all_port()}}{
+Update all portfolios holdings (except CTFs, see 
+  update_ctf_holdings) from Black Diamond and SEC
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Database$update_all_port(user_email = NULL, as_of = NULL, update_csv = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Database$update_all_port(user_email = NULL, as_of = NULL)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{user_email}}{will default to Alejandro's if left NULL, SEC requires}
+
+\item{\code{name}}{as_of for Black Diamond date for when to pull as of, will 
+default to last trading day if letf NULL}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+The portfolios to be updated are filtered from the MSL that have
+holdings sources of BD or SEC. CTFs are updated with a seperate
+process to work around the bi-monthly SMA update within the CTF.
+}
+
+\subsection{Returns}{
+saves updated holdings in S3
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-get_curr_holdings"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-get_curr_holdings}{}}}
 \subsection{Method \code{get_curr_holdings()}}{
+Subset holdings data.frame for only the most recent holdings
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$get_curr_holdings()}\if{html}{\out{</div>}}
+}
+
+\subsection{Details}{
+Holdings data.frames will have a time-series containing the history
+of holdings, this function will return all of the holdings on the 
+most recent date stored in the data.frame.
 }
 
 }
@@ -283,17 +452,40 @@ files in S3, accessed through the `bucket` or `S3FileSystem`.
 \if{html}{\out{<a id="method-Database-read_all_ret"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-read_all_ret}{}}}
 \subsection{Method \code{read_all_ret()}}{
+Read in all retuns to populate ret field
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$read_all_ret()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+db$ret will now be populated with a list containing two xts
+  objects: $d daily returns and $m monthly returns
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-filter_fs_ids"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-filter_fs_ids}{}}}
 \subsection{Method \code{filter_fs_ids()}}{
+Get factset request ids from the msl
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$filter_fs_ids(max_iter_by = 50)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{max_iter_by}}{number to sequence large number of ids}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+Large amounts of ids need to broken up, some factset API requests only
+  allow 50 ids at a time. Request ids first look for ISIN, then CUSIP, 
+  SEDOL, LEI, and Identifier in order. The function returns a list with
+  ids and iter for global prices and fi_ids and fi_iter for the formula 
+  API (mutual fund returns). The iter is the sequence of large amounts
+  of ids to be broken up into smaller pieces. For small numbers, e.g., 
+  10 ids will contain and iter of c(1, 10).
 }
 
 }
