@@ -22,6 +22,8 @@ Database connects to various data providers, e.g., FactSet, Black Diamond,
 \item{\code{macro}}{list with tables for R3000 and ACWI model from Piper Sandler}
 
 \item{\code{ret}}{list with daily and monthly return tables}
+
+\item{\code{fina}}{table with latest financial metrics for companies}
 }
 \if{html}{\out{</div>}}
 }
@@ -53,7 +55,6 @@ Database connects to various data providers, e.g., FactSet, Black Diamond,
 \item \href{#method-Database-update_fs_fina_quarterly}{\code{Database$update_fs_fina_quarterly()}}
 \item \href{#method-Database-update_fs_mf_ret_daily}{\code{Database$update_fs_mf_ret_daily()}}
 \item \href{#method-Database-update_fs_ret_daily}{\code{Database$update_fs_ret_daily()}}
-\item \href{#method-Database-update_ctf_daily}{\code{Database$update_ctf_daily()}}
 \item \href{#method-Database-update_pdf_funds}{\code{Database$update_pdf_funds()}}
 \item \href{#method-Database-load_ret}{\code{Database$load_ret()}}
 \item \href{#method-Database-update_macro}{\code{Database$update_macro()}}
@@ -417,7 +418,7 @@ Update all portfolios holdings (except CTFs, see
 \describe{
 \item{\code{user_email}}{will default to Alejandro's if left NULL, SEC requires}
 
-\item{\code{name}}{as_of for Black Diamond date for when to pull as of, will 
+\item{\code{as_of}}{for Black Diamond date for when to pull as of, will 
 default to last trading day if letf NULL}
 }
 \if{html}{\out{</div>}}
@@ -493,8 +494,17 @@ Large amounts of ids need to broken up, some factset API requests only
 \if{html}{\out{<a id="method-Database-update_fs_fina_most_recent"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_fs_fina_most_recent}{}}}
 \subsection{Method \code{update_fs_fina_most_recent()}}{
+Run after each quarter to add most recent fundamental data point 
+(e.g., P/E, ROE) to S3 table.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_fs_fina_most_recent()}\if{html}{\out{</div>}}
+}
+
+\subsection{Details}{
+The files are organized by metric. For example the P/E file will
+contain a time-series of P/Es for each company. This function reads all
+the metrics and combines the latest values for each company into one
+table.
 }
 
 }
@@ -502,6 +512,8 @@ Large amounts of ids need to broken up, some factset API requests only
 \if{html}{\out{<a id="method-Database-update_fs_fina_quarterly"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_fs_fina_quarterly}{}}}
 \subsection{Method \code{update_fs_fina_quarterly()}}{
+Run after each quarter to add most recent fundamental data point 
+(e.g., P/E, ROE) to S3 table.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_fs_fina_quarterly(
   yrs_back = 1,
@@ -509,13 +521,43 @@ Large amounts of ids need to broken up, some factset API requests only
 )}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{yrs_back}}{integer for how many years back to pull most recent data}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+Currently set up for P/E, P/B, P/FCF, DY, ROE, and Mkt Cap. The data
+are organized by the metric. The P/E table will contain a time-series
+of the P/E for each stock.
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Database-update_fs_mf_ret_daily"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_fs_mf_ret_daily}{}}}
 \subsection{Method \code{update_fs_mf_ret_daily()}}{
+Update mutual fund returns with Factset formula API
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_fs_mf_ret_daily(days_back = 0)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{days_back}}{integer for how many trading days to pull history for, 
+default is zero to pull only latest trading day}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+Will add new returns to existing time-series stored in S3. New 
+  time-series that are not in the old file will have NAs for older returns
+  depending on the history available and the days_back input. For 
+  existing time-series, any overlap in the new and old returns will be
+  overwritten with the new returns.
 }
 
 }
@@ -523,17 +565,31 @@ Large amounts of ids need to broken up, some factset API requests only
 \if{html}{\out{<a id="method-Database-update_fs_ret_daily"></a>}}
 \if{latex}{\out{\hypertarget{method-Database-update_fs_ret_daily}{}}}
 \subsection{Method \code{update_fs_ret_daily()}}{
+Update returns for all investments traded on an exchange 
+(e.g., stocks, ETFs) with Factset Global Prices API
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Database$update_fs_ret_daily(ids = NULL, date_start = NULL, date_end = NULL)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{optional, can pass through string of ids, otherwise will
+pull from the master security list}
+
+\item{\code{date_start}}{optional string 'YYYY-MM-DD' to represent the first
+date in the time-series}
+
+\item{\code{date_end}}{optional string 'YYYY-MM-DD' to represent the last date
+in the time-series.}
 }
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Database-update_ctf_daily"></a>}}
-\if{latex}{\out{\hypertarget{method-Database-update_ctf_daily}{}}}
-\subsection{Method \code{update_ctf_daily()}}{
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Database$update_ctf_daily()}\if{html}{\out{</div>}}
+\if{html}{\out{</div>}}
+}
+\subsection{Details}{
+The default for dates is to pull the most recent trading days return.
+  The routine is run overnight to add a new return to the existing 
+  table of returns. To add new returns specify ids and set the date_start
+  farther back (~5 years) to create a history.
 }
 
 }

@@ -27,6 +27,9 @@ Database <- R6::R6Class(
     #' @field ret list with daily and monthly return tables 
     ret = NULL,
 
+    #' @field fina table with latest financial metrics for companies
+    fina = NULL,
+    
     #' @description Create a Database
     #' @param msl table: master security list
     #' @param geo table: country number and geography
@@ -550,9 +553,10 @@ Database <- R6::R6Class(
         #' Run after each quarter to add most recent fundamental data point 
         #' (e.g., P/E, ROE) to S3 table.
     #' @details
-        #' Currently set up for P/E, P/B, P/FCF, DY, ROE, and Mkt Cap. The data
-        #' are organized by the metric. The P/E table will contain a time-series
-        #' of the P/E for each stock. 
+        #' The files are organized by metric. For example the P/E file will
+        #' contain a time-series of P/Es for each company. This function reads all
+        #' the metrics and combines the latest values for each company into one
+        #' table.
     update_fs_fina_most_recent = function() {
       dat <- list()
       dat$pe <- read_feather(self$bucket$path('co-data/arrow/PE.arrow'))
@@ -582,9 +586,14 @@ Database <- R6::R6Class(
       write_feather(as_of_df, self$bucket$path('co-data/arrow/fina-as-of.arrow'))
     },
 
-    # Update Factset financial data for stock universe each quarter
-    # yrs_back = how many years back to pull data
-    # will save arrow and parquet files to S3
+    #' @description
+    #' Run after each quarter to add most recent fundamental data point 
+    #' (e.g., P/E, ROE) to S3 table.
+    #' @param yrs_back integer for how many years back to pull most recent data
+    #' @details
+    #' Currently set up for P/E, P/B, P/FCF, DY, ROE, and Mkt Cap. The data
+    #' are organized by the metric. The P/E table will contain a time-series
+    #' of the P/E for each stock. 
     update_fs_fina_quarterly = function(yrs_back = 1,
       dtype = c('PE', 'PB', 'PFCF', 'DY', 'ROE', 'MCAP')) {
       # TO-DO read old file and and new row
@@ -667,8 +676,17 @@ Database <- R6::R6Class(
       )
     },
 
-
-    # update formula api returns (mutual funds) daily
+    
+    #' @description
+        #' Update mutual fund returns with Factset formula API
+    #' @param days_back integer for how many trading days to pull history for, 
+    #'   default is zero to pull only latest trading day
+    #' @details
+    #'   Will add new returns to existing time-series stored in S3. New 
+    #'   time-series that are not in the old file will have NAs for older returns
+    #'   depending on the history available and the days_back input. For 
+    #'   existing time-series, any overlap in the new and old returns will be
+    #'   overwritten with the new returns.
     update_fs_mf_ret_daily = function(days_back = 0) {
       old_ret <- read_feather(self$bucket$path('returns/daily/mutual-fund.arrow'))
       old_ret <- df_to_xts(old_ret)
@@ -707,7 +725,20 @@ Database <- R6::R6Class(
       write_feather(combo, self$bucket$path('returns/daily/mutual-fund.arrow'))
     },
 
-
+    #' @description
+        #' Update returns for all investments traded on an exchange 
+        #' (e.g., stocks, ETFs) with Factset Global Prices API
+    #' @param ids optional, can pass through string of ids, otherwise will
+    #'   pull from the master security list
+    #' @param date_start optional string 'YYYY-MM-DD' to represent the first
+    #'   date in the time-series
+    #' @param date_end optional string 'YYYY-MM-DD' to represent the last date
+    #'   in the time-series.
+    #' @details
+    #'   The default for dates is to pull the most recent trading days return.
+    #'   The routine is run overnight to add a new return to the existing 
+    #'   table of returns. To add new returns specify ids and set the date_start
+    #'   farther back (~5 years) to create a history.
     update_fs_ret_daily = function(ids = NULL, date_start = NULL,
                                    date_end = NULL) {
       old_ret <- read_feather(self$bucket$path('returns/daily/factset.arrow'))
@@ -758,36 +789,44 @@ Database <- R6::R6Class(
       write_feather(df_out, self$bucket$path('returns/daily/factset.arrow'))
     },
 
-
-    update_ctf_daily = function() {
-      ix <- self$msl$ReturnSource == 'ctf_d'
-      ix[is.na(ix)] <- FALSE
-      factset <- self$msl[ix, ]
-      res <- list()
-      for (i in 1:nrow(factset)) {
-        id <- paste0("CLIENT:/PA_SOURCED_RETURNS/", factset$ISIN[i])
-        res[[i]] <- download_fs_ret(id, self$api_keys)
+    
+    update_ctf_monthly = function() {
+      ctf <- subset_df(self$msl, 'ReturnSource', 'ctf_d')
+      rl <- list()
+      for (i in 1:nrow(ctf)) {
+        id <- 
       }
-      res_ret <- lapply(res, '[[', 'ret')
-      is_miss <- function(x) {
-        if (is.null(nrow(x))) {
-          return(TRUE)
-        }
-        if (nrow(x) == 0) {
-          return(TRUE)
-        } else {
-          return(FALSE)
-        }
-      }
-      miss_ret <- sapply(res_ret, is_miss)
-      new_ret <- do.call('cbind', res_ret[!miss_ret])
-      colnames(new_ret) <- factset$ReturnCol[!miss_ret]
-      hist_ret <- read_parquet(self$bucket$path("returns/daily/ctf_d.parquet"))
-      hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
-      combo <- xts_rbind(hist_ret, new_ret)
-      combo <- xts_to_dataframe(combo)
-      write_parquet(combo, self$bucket$path("returns/daily/ctf_d.parquet"))
-    },
+    }
+    
+    # update_ctf_daily = function() {
+    #   ix <- self$msl$ReturnSource == 'ctf_d'
+    #   ix[is.na(ix)] <- FALSE
+    #   factset <- self$msl[ix, ]
+    #   res <- list()
+    #   for (i in 1:nrow(factset)) {
+    #     id <- paste0("CLIENT:/PA_SOURCED_RETURNS/", factset$ISIN[i])
+    #     res[[i]] <- download_fs_ret(id, self$api_keys)
+    #   }
+    #   res_ret <- lapply(res, '[[', 'ret')
+    #   is_miss <- function(x) {
+    #     if (is.null(nrow(x))) {
+    #       return(TRUE)
+    #     }
+    #     if (nrow(x) == 0) {
+    #       return(TRUE)
+    #     } else {
+    #       return(FALSE)
+    #     }
+    #   }
+    #   miss_ret <- sapply(res_ret, is_miss)
+    #   new_ret <- do.call('cbind', res_ret[!miss_ret])
+    #   colnames(new_ret) <- factset$ReturnCol[!miss_ret]
+    #   hist_ret <- read_parquet(self$bucket$path("returns/daily/ctf_d.parquet"))
+    #   hist_ret <- xts(hist_ret[, -1], hist_ret[[1]])
+    #   combo <- xts_rbind(hist_ret, new_ret)
+    #   combo <- xts_to_dataframe(combo)
+    #   write_parquet(combo, self$bucket$path("returns/daily/ctf_d.parquet"))
+    # },
 
     update_pdf_funds = function() {
       wb <- 'N:/Investment Team/CTFs/Private Diversifiers/PDF Workup.xlsx'

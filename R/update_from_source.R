@@ -326,7 +326,7 @@ refresh_bd_key = function(api_keys, save_to_n = FALSE) {
 #'   default "-5" downloads last 5 trading days
 #' @return list with id and xts of returns
 #' @export
-download_fs_ctf_ret <- function(id, api_keys, t_minus = "-5") {
+download_fs_ctf_ret <- function(id, api_keys, t_minus = "-5", freq = 'D') {
   username <- api_keys$fs$username
   password <- api_keys$fs$password
   base_url <- 'https://api.factset.com/formula-api/v1/time-series?ids=$IDS&formulas='
@@ -337,7 +337,8 @@ download_fs_ctf_ret <- function(id, api_keys, t_minus = "-5") {
     id,
     "\",",
     t_minus,
-    ",0,D,FIVEDAY,USD,1)"
+    ",0,", freq,
+    ",FIVEDAY,USD,1)"
   )
   response <- httr::GET(request, authenticate(username, password))
   output <- rawToChar(response$content)
